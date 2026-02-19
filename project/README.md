@@ -2,7 +2,7 @@
 
 ## 🚀 Project Overview
 
-**ProjectFlow** is a collaborative project management tool built with Next.js 14+ App Router, designed as the capstone project for a 12-week full-stack development internship program. This is currently a **mockup/prototype** with placeholder components and incomplete functionality.
+**ProjectFlow** is a collaborative project management tool built with Next.js 16 App Router, designed as the capstone project for a 12-week full-stack development internship program. This is currently a **mockup/prototype** with placeholder components and incomplete functionality.
 
 ### 📋 What We're Building
 
@@ -45,8 +45,9 @@ By completing this project, interns will demonstrate proficiency in:
 ## 🛠 Tech Stack
 
 ### Currently Implemented
-- **Framework**: Next.js 14.0.4 (App Router) ✅
-- **Language**: TypeScript ✅
+- **Framework**: Next.js 16.1.6 (App Router with Turbopack) ✅
+- **Runtime**: React 19 ✅
+- **Language**: TypeScript 5.9 ✅
 - **Styling**: Tailwind CSS with custom color scheme ✅
 - **Icons**: Lucide React ✅
 - **Theme System**: Dark/Light mode toggle ✅
@@ -62,8 +63,8 @@ By completing this project, interns will demonstrate proficiency in:
 
 ### Development Tools
 - **Version Control**: Git + GitHub
-- **Package Manager**: pnpm
-- **Linting**: ESLint + Next.js config
+- **Package Manager**: pnpm 10.10.0
+- **Linting**: ESLint 9 + Next.js config
 - **IDE**: VS Code
 
 ## 📁 Current Project Structure
