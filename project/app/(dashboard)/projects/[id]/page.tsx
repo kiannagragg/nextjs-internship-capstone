@@ -1,6 +1,6 @@
 import { ArrowLeft, Settings, Users, Calendar, MoreHorizontal } from "lucide-react"
 import Link from "next/link"
-import { DashboardLayout } from "@/components/dashboard-layout"
+import { DashboardLayout } from "@/components/features/dashboard/dashboard-layout"
 
 // --- GENERATE STABLE MOCK DATA ---
 // Math.random fix: This runs once when the file loads, so it's "pure" to React

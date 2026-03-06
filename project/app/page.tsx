@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { ArrowRight, CheckCircle, Users, Kanban } from "lucide-react"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 
 export default function HomePage() {
   return (
