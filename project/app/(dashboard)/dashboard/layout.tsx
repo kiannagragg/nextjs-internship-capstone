@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, Suspense } from "react"
 import Link from "next/link"
-import { ThemeToggle } from "@/components/theme-toggle"
+import { ThemeToggle } from "@/components/shared/theme-toggle"
 import {
   Home,
   FolderOpen,
