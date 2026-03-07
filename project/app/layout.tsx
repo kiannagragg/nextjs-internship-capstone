@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider afterSignOutUrl="/">
       <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${syne.variable}`}>
         <body className="font-body">
           <ThemeProvider>{children}</ThemeProvider>
