@@ -1,69 +1,143 @@
-import { Kanban, Users, Calendar, BarChart3, Shield, Zap } from "lucide-react"
+/* ============================================
+   File: components/landing/features.tsx
+   Action: REPLACE existing features.tsx
+   
+   - Hidden scrollbar (CSS + utility)
+   - 1 card on mobile, 2 on md, 3 on lg
+   - Cards sized to fill available space per breakpoint
+   - FLOE. in span with font-black
+   ============================================ */
+
+"use client"
+
+import { useRef } from "react"
+import { CheckSquare, Users, BarChart3, Calendar, ChevronLeft, ChevronRight } from "lucide-react"
 
 const features = [
   {
-    icon: Kanban,
-    title: "Kanban Boards",
-    description:
-      "Visualize your workflow with intuitive drag-and-drop Kanban boards that keep your team organized.",
+    icon: (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="text-foreground"
+      >
+        <rect width="6" height="14" x="2" y="5" rx="1" />
+        <rect width="6" height="10" x="16" y="9" rx="1" />
+        <rect width="6" height="18" x="9" y="3" rx="1" />
+      </svg>
+    ),
+    title: "Visual Kanban Boards",
+    description: "Drag-and-drop boards that actually feel good to use.",
   },
   {
-    icon: Users,
+    icon: <CheckSquare size={24} className="text-foreground" />,
+    title: "Task Management",
+    description: "Assign tasks, track progress, and see who's doing what.",
+  },
+  {
+    icon: <Users size={24} className="text-foreground" />,
     title: "Team Collaboration",
-    description: "Work together seamlessly with real-time updates, comments, and task assignments.",
+    description: "Invite members. Everyone sees what matters to them, and nothing more.",
   },
   {
-    icon: Calendar,
-    title: "Timeline Management",
+    icon: <BarChart3 size={24} className="text-foreground" />,
+    title: "Analytics",
     description:
-      "Track deadlines and milestones with integrated calendar views and due date reminders.",
+      "Monitor project velocity, team efficiency, and task completion with real-time insights.",
   },
   {
-    icon: BarChart3,
-    title: "Progress Analytics",
-    description: "Monitor project progress with detailed analytics and performance insights.",
-  },
-  {
-    icon: Shield,
-    title: "Secure & Private",
-    description: "Enterprise-grade security ensures your project data stays safe and confidential.",
-  },
-  {
-    icon: Zap,
-    title: "Lightning Fast",
-    description: "Optimized performance delivers instant updates and smooth user experience.",
+    icon: <Calendar size={24} className="text-foreground" />,
+    title: "Calendar",
+    description: "See upcoming deadlines, milestones, and events in a unified calendar view.",
   },
 ]
 
 export function Features() {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const scroll = (direction: "left" | "right") => {
+    if (!scrollRef.current) return
+    const container = scrollRef.current
+    const gap = 16
+    const cardWidth = container.firstElementChild
+      ? (container.firstElementChild as HTMLElement).offsetWidth + gap
+      : 300
+    container.scrollBy({
+      left: direction === "left" ? -cardWidth : cardWidth,
+      behavior: "smooth",
+    })
+  }
+
   return (
-    <section id="features" className="px-4 py-20 sm:px-6 lg:px-8">
-      <div className="container mx-auto">
-        <div className="mb-16 text-center">
-          <h2 className="mb-4 text-4xl font-bold text-outer_space-500 dark:text-platinum-500">
-            Everything You Need to Succeed
-          </h2>
-          <p className="mx-auto max-w-2xl text-xl text-payne's_gray-500 dark:text-french_gray-500">
-            Powerful features designed to help teams collaborate effectively and deliver projects on
-            time.
-          </p>
+    <section id="features" className="px-4 pb-24 pt-12 sm:px-6">
+      <div className="mx-auto max-w-7xl">
+        {/* Badge */}
+        <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs font-medium">
+          <span className="h-1.5 w-1.5 rounded-full bg-brand" />
+          Built for software teams
         </div>
 
-        <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature, index) => (
-            <div
-              key={index}
-              className="rounded-xl border border-french_gray-300 bg-white p-6 shadow-lg transition-shadow hover:shadow-xl dark:border-payne's_gray-400 dark:bg-outer_space-400"
+        {/* Heading row with carousel arrows */}
+        <div className="mb-3 flex items-end justify-between">
+          <h2 className="font-display text-3xl font-bold tracking-tight md:text-4xl">
+            Why{" "}
+            <span className="font-black">
+              FLOE<span className="text-brand">.</span>
+            </span>
+            ?
+          </h2>
+
+          {/* Carousel nav arrows */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => scroll("left")}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Scroll features left"
             >
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-lg bg-blue_munsell-100 dark:bg-blue_munsell-900">
-                <feature.icon className="text-blue_munsell-500" size={24} />
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={() => scroll("right")}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Scroll features right"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+
+        <p className="mb-8 max-w-lg text-sm leading-relaxed text-muted-foreground md:text-base">
+          Designed to fit the way software teams actually work. FLOE. keeps your team&apos;s work
+          moving — from idea to done — without the chaos of overcomplicated tools.
+        </p>
+
+        {/* Carousel — no visible scrollbar */}
+        <div
+          ref={scrollRef}
+          className="no-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto"
+        >
+          {features.map((feature) => (
+            <div
+              key={feature.title}
+              className="flex w-[85vw] max-w-[340px] flex-none snap-start flex-col justify-between rounded-xl border border-border p-6 transition-all hover:border-muted-foreground/20 hover:shadow-sm sm:w-[calc(50%-8px)] lg:w-[calc(33.333%-11px)]"
+            >
+              {/* Icon — top right */}
+              <div className="mb-16 flex justify-end">{feature.icon}</div>
+
+              {/* Title + description — bottom */}
+              <div>
+                <h3 className="mb-2 font-display text-xl font-semibold">{feature.title}</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {feature.description}
+                </p>
               </div>
-              <h3 className="mb-2 text-xl font-semibold text-outer_space-500 dark:text-platinum-500">
-                {feature.title}
-              </h3>
-              <p className="text-payne's_gray-500 dark:text-french_gray-500">
-                {feature.description}
-              </p>
             </div>
           ))}
         </div>
