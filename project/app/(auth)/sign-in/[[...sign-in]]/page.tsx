@@ -1,5 +1,5 @@
-// TODO: Task 2.3 - Create sign-in and sign-up pages
-// TODO: Task 2.3 - Replace with actual Clerk SignIn component
+// DONE: Task 2.3 - Create sign-in and sign-up pages
+// DONE: Task 2.3 - Replace with actual Clerk SignIn component
 import { SignIn } from "@clerk/nextjs"
 import type { Metadata } from "next"
 
@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 export default function SignInPage() {
   return (
     <SignIn
+      forceRedirectUrl="/dashboard"
       appearance={{
         variables: {
           colorPrimary: "#000000",
@@ -40,11 +41,3 @@ export default function SignInPage() {
     />
   )
 }
-
-/*
-TODO: Task 2.3 Implementation Notes:
-- Import SignIn from @clerk/nextjs
-- Configure sign-in redirects
-- Style to match design system
-- Add proper error handling
-*/

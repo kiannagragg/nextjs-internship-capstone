@@ -1,5 +1,5 @@
-// TODO: Task 2.3 - Create sign-in and sign-up pages
-// TODO: Task 2.3 - Replace with actual Clerk SignUp component
+// DONE: Task 2.3 - Create sign-in and sign-up pages
+// DONE: Task 2.3 - Replace with actual Clerk SignUp component
 import { SignUp } from "@clerk/nextjs"
 import type { Metadata } from "next"
 
@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 export default function SignUpPage() {
   return (
     <SignUp
+      forceRedirectUrl="/dashboard"
       appearance={{
         variables: {
           colorPrimary: "#000000",
@@ -40,12 +41,3 @@ export default function SignUpPage() {
     />
   )
 }
-
-/*
-TODO: Task 2.3 Implementation Notes:
-- Import SignUp from @clerk/nextjs
-- Configure sign-up redirects
-- Style to match design system
-- Add proper error handling
-- Set up webhook for user data sync (Task 2.5)
-*/
