@@ -1,9 +1,5 @@
 /* ============================================
-   File: lib/auth.ts
-   Action: REPLACE existing placeholder
-   Task: 2.4 - User session management
-   
-   Server-side auth helpers. Use these in server
+   Server-side auth helpers. Used in server
    components and server actions instead of calling
    Clerk directly — makes it easier to swap auth
    providers later if needed.
@@ -27,6 +23,8 @@ export async function getCurrentUser() {
     lastName: user.lastName,
     imageUrl: user.imageUrl,
     fullName: [user.firstName, user.lastName].filter(Boolean).join(" "),
+    role: (user.unsafeMetadata?.role as string) ?? null,
+    onboardingComplete: user.unsafeMetadata?.onboardingComplete === true,
   }
 }
 
@@ -49,4 +47,12 @@ export async function requireAuth() {
 export async function getUserId() {
   const { userId } = await auth()
   return userId
+}
+
+/**
+ * Check if the current user has completed onboarding.
+ */
+export async function isOnboardingComplete() {
+  const user = await currentUser()
+  return user?.unsafeMetadata?.onboardingComplete === true
 }
