@@ -1,100 +1,127 @@
-import Link from "next/link"
-import { MoreHorizontal, Users, Calendar } from "lucide-react"
+/* ============================================
+   Phase 3: Replace mock data with real DB queries
+   ============================================ */
 
-const projects = [
+import Link from "next/link"
+
+interface RecentProject {
+  id: string
+  name: string
+  updated: string
+  progress: number
+  status: string
+  priority: string
+  color: string
+  members: { initials: string }[]
+}
+
+const mockProjects: RecentProject[] = [
   {
     id: "1",
-    name: "Website Redesign",
-    description: "Complete overhaul of company website",
-    progress: 75,
-    members: 5,
-    dueDate: "2024-02-15",
-    status: "In Progress",
+    name: "API Documentation",
+    updated: "Last updated 2 hrs ago",
+    progress: 22,
+    status: "Active",
+    priority: "Medium",
+    color: "#2D6EF7",
+    members: [{ initials: "KG" }],
   },
   {
     id: "2",
-    name: "Mobile App Development",
-    description: "iOS and Android app development",
-    progress: 45,
-    members: 8,
-    dueDate: "2024-03-20",
-    status: "In Progress",
+    name: "API Documentation",
+    updated: "Last updated 2 hrs ago",
+    progress: 22,
+    status: "Active",
+    priority: "Medium",
+    color: "#2D6EF7",
+    members: [{ initials: "KG" }],
   },
   {
     id: "3",
-    name: "Marketing Campaign",
-    description: "Q1 marketing campaign planning",
-    progress: 90,
-    members: 3,
-    dueDate: "2024-01-30",
-    status: "Review",
+    name: "API Documentation",
+    updated: "Last updated 2 hrs ago",
+    progress: 22,
+    status: "Active",
+    priority: "Medium",
+    color: "#2D6EF7",
+    members: [{ initials: "KG" }],
+  },
+  {
+    id: "4",
+    name: "API Documentation",
+    updated: "Last updated 2 hrs ago",
+    progress: 22,
+    status: "Active",
+    priority: "Medium",
+    color: "#2D6EF7",
+    members: [{ initials: "KG" }],
   },
 ]
 
 export function RecentProjects() {
   return (
-    <div className="rounded-lg border border-french_gray-300 bg-white p-6 dark:border-payne's_gray-400 dark:bg-outer_space-500">
-      <div className="mb-6 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-outer_space-500 dark:text-platinum-500">
+    <div>
+      <div className="mb-3 flex items-center gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
           Recent Projects
-        </h3>
-        <Link
-          href="/projects"
-          className="text-sm font-medium text-blue_munsell-500 hover:text-blue_munsell-600"
-        >
-          View all
-        </Link>
+        </h2>
+        <div className="h-px flex-1 bg-border" />
       </div>
 
-      <div className="space-y-4">
-        {projects.map((project) => (
-          <div
+      <div className="space-y-2">
+        {mockProjects.map((project) => (
+          <Link
             key={project.id}
-            className="rounded-lg border border-french_gray-300 p-4 dark:border-payne's_gray-400"
+            href={`/projects/${project.id}`}
+            className="group flex items-center gap-4 rounded-xl border border-border p-4 transition-colors hover:bg-accent/50"
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <h4 className="font-medium text-outer_space-500 dark:text-platinum-500">
-                  {project.name}
-                </h4>
-                <p className="mt-1 text-sm text-payne's_gray-500 dark:text-french_gray-400">
-                  {project.description}
-                </p>
+            {/* Color dot */}
+            <div
+              className="h-3 w-3 shrink-0 rounded-full"
+              style={{ backgroundColor: project.color }}
+            />
 
-                <div className="mt-3 flex items-center space-x-4 text-sm text-payne's_gray-500 dark:text-french_gray-400">
-                  <div className="flex items-center">
-                    <Users size={16} className="mr-1" />
-                    {project.members}
-                  </div>
-                  <div className="flex items-center">
-                    <Calendar size={16} className="mr-1" />
-                    {project.dueDate}
-                  </div>
-                </div>
-
-                <div className="mt-3">
-                  <div className="mb-1 flex items-center justify-between text-sm">
-                    <span className="text-payne's_gray-500 dark:text-french_gray-400">
-                      Progress
-                    </span>
-                    <span className="text-outer_space-500 dark:text-platinum-500">
-                      {project.progress}%
-                    </span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-french_gray-300 dark:bg-payne's_gray-400">
-                    <div
-                      className="h-2 rounded-full bg-blue_munsell-500 transition-all duration-300"
-                      style={{ width: `${project.progress}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <button className="rounded p-1 hover:bg-platinum-500 dark:hover:bg-payne's_gray-400">
-                <MoreHorizontal size={16} />
-              </button>
+            {/* Project info */}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">{project.name}</p>
+              <p className="text-xs text-muted-foreground">{project.updated}</p>
             </div>
-          </div>
+
+            {/* Progress */}
+            <div className="hidden items-center gap-2 sm:flex">
+              <span className="text-xs text-muted-foreground">Progress</span>
+              <div className="h-1.5 w-16 rounded-full bg-muted">
+                <div
+                  className="h-1.5 rounded-full bg-brand"
+                  style={{ width: `${project.progress}%` }}
+                />
+              </div>
+              <span className="text-xs font-medium">{project.progress}%</span>
+            </div>
+
+            {/* Status + Priority badges */}
+            <div className="hidden items-center gap-2 md:flex">
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                {project.status}
+              </span>
+              <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                {project.priority}
+              </span>
+            </div>
+
+            {/* Member avatars */}
+            <div className="hidden items-center -space-x-1.5 lg:flex">
+              {project.members.map((member, i) => (
+                <div
+                  key={i}
+                  className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[9px] font-bold text-muted-foreground"
+                >
+                  {member.initials}
+                </div>
+              ))}
+            </div>
+          </Link>
         ))}
       </div>
     </div>

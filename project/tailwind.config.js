@@ -9,7 +9,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      /* ---- COLORS ---- */
       colors: {
+        /* Shadcn design token mappings */
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -43,76 +45,44 @@ module.exports = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Custom color palette based on requirements - NO shadcn colors
-        platinum: {
-          DEFAULT: "#dcdcdd",
-          50: "#f8f8f8",
-          100: "#f1f1f1",
-          200: "#e9e9ea",
-          300: "#e2e2e3",
-          400: "#afafb0",
-          500: "#dcdcdd",
-          600: "#828285",
-          700: "#575759",
-          800: "#2b2b2c",
-          900: "#f8f8f8",
+
+        /* FLOE brand accent */
+        brand: {
+          DEFAULT: "hsl(var(--brand))",
+          50: "#EEF3FE",
+          100: "#D4E1FD",
+          200: "#A9C3FB",
+          300: "#7EA5F9",
+          400: "#5387F8",
+          500: "#2D6EF7",
+          600: "#0B52E0",
+          700: "#083DAA",
+          800: "#062973",
+          900: "#03143D",
         },
-        french_gray: {
-          DEFAULT: "#c5c3c6",
-          50: "#f3f3f4",
-          100: "#e8e7e8",
-          200: "#dcdbdd",
-          300: "#d1cfd1",
-          400: "#9e9aa0",
-          500: "#c5c3c6",
-          600: "#777279",
-          700: "#4f4c51",
-          800: "#282628",
-          900: "#f3f3f4",
-        },
-        outer_space: {
-          DEFAULT: "#46494c",
-          50: "#d9dbdc",
-          100: "#b4b7b9",
-          200: "#8e9297",
-          300: "#6a6e73",
-          400: "#393b3e",
-          500: "#46494c",
-          600: "#2b2c2e",
-          700: "#1c1e1f",
-          800: "#0e0f0f",
-          900: "#d9dbdc",
-        },
-        "payne's_gray": {
-          DEFAULT: "#4c5c68",
-          50: "#d9dfe3",
-          100: "#b2bec7",
-          200: "#8c9eab",
-          300: "#677d8e",
-          400: "#3c4953",
-          500: "#4c5c68",
-          600: "#2d373e",
-          700: "#1e2429",
-          800: "#0f1215",
-          900: "#d9dfe3",
-        },
-        blue_munsell: {
-          DEFAULT: "#1985a1",
-          50: "#c7edf6",
-          100: "#8edaed",
-          200: "#56c8e5",
-          300: "#22b3d7",
-          400: "#146a7f",
-          500: "#1985a1",
-          600: "#0f4f5f",
-          700: "#0a3540",
-          800: "#051a20",
-          900: "#c7edf6",
+
+        /* Project / board accent palette */
+        project: {
+          green: "#A8FF78",
+          violet: "#8B5CF6",
+          pink: "#EC4899",
+          teal: "#14B8A6",
+          amber: "#F59E0B",
+          terracotta: "#C4714A",
+          red: "#EF4444",
+          gray: "#6B7280",
         },
       },
+
+      /* ---- FONTS ---- */
       fontFamily: {
-        sans: ["Inter", "sans-serif"],
+        body: ["var(--font-body)", "sans-serif"],
+        display: ["var(--font-display)", "sans-serif"],
+        /* Override default 'sans' to use DM Sans */
+        sans: ["var(--font-body)", "sans-serif"],
       },
+
+      /* ---- BORDER RADIUS (Shadcn) ---- */
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

@@ -1,50 +1,102 @@
 import Link from "next/link"
-import { ArrowRight, CheckCircle, Users, Zap } from "lucide-react"
+import { ArrowRight } from "lucide-react"
+
+function DecorativeCurveUpLeft({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 300 800"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+      preserveAspectRatio="xMinYMin slice"
+    >
+      <path
+        d="M-52.708 1.40859C205.976 96.1006 68.4864 209.419 -9.75002 247.867"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="none"
+      />
+    </svg>
+  )
+}
+
+function DecorativeCurveLeft({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 300 800"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+      preserveAspectRatio="xMinYMin slice"
+    >
+      <path
+        d="M612.695 0.891571C302.458 420.636 129.518 -241.368 -250 228.758"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="none"
+      />
+    </svg>
+  )
+}
+
+function DecorativeCurveRight({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 300 500"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+      preserveAspectRatio="xMaxYMin slice"
+    >
+      <path
+        d="M1.00806 117.883C324.508 -175.698 516.508 358.802 743.008 0.801942"
+        stroke="currentColor"
+        strokeWidth="2"
+        fill="none"
+      />
+    </svg>
+  )
+}
 
 export function Hero() {
   return (
-    <section className="px-4 py-20 sm:px-6 lg:px-8">
-      <div className="container mx-auto text-center">
-        <div className="mx-auto max-w-4xl">
-          <h1 className="mb-6 text-5xl font-bold text-outer_space-500 dark:text-platinum-500 md:text-6xl">
-            Streamline Your
-            <span className="text-blue_munsell-500"> Project Management</span>
-          </h1>
+    <section className="relative overflow-hidden px-4 pb-20 pt-16 sm:px-6 md:pb-32 md:pt-28">
+      {/* Upper-left small curve */}
+      <DecorativeCurveUpLeft className="pointer-events-none absolute -left-4 top-16 h-[250px] w-auto text-muted-foreground sm:-left-2 sm:top-10 sm:h-[320px] md:left-4 md:top-24 md:h-[420px] lg:left-8 lg:top-28 lg:h-[480px]" />
 
-          <p className="mx-auto mb-8 max-w-2xl text-xl text-payne's_gray-500 dark:text-french_gray-500">
-            Organize tasks, collaborate with your team, and deliver projects on time with our
-            intuitive Kanban-style project management platform.
-          </p>
+      {/* Main left curve */}
+      <DecorativeCurveLeft className="pointer-events-none absolute -left-4 top-24 h-[400px] w-auto text-muted-foreground sm:-left-2 sm:top-16 sm:h-[500px] md:left-4 md:top-32 md:h-[650px] lg:left-8 lg:top-36 lg:h-[750px]" />
 
-          <div className="mb-12 flex flex-col justify-center gap-4 sm:flex-row">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center rounded-lg bg-blue_munsell-500 px-8 py-4 text-lg font-semibold text-white transition-colors hover:bg-blue_munsell-600"
-            >
-              Start Free Trial
-              <ArrowRight className="ml-2" size={20} />
-            </Link>
+      {/* Right curve */}
+      <DecorativeCurveRight className="pointer-events-none absolute -right-2 top-32 h-[250px] w-auto text-muted-foreground sm:right-0 sm:top-32 sm:h-[320px] md:right-4 md:top-40 md:h-[420px] lg:right-10 lg:top-44 lg:h-[480px]" />
 
-            <button className="inline-flex items-center rounded-lg border-2 border-blue_munsell-500 px-8 py-4 text-lg font-semibold text-blue_munsell-500 transition-colors hover:bg-blue_munsell-50 dark:hover:bg-blue_munsell-900">
-              Watch Demo
-            </button>
-          </div>
+      {/* Content */}
+      <div className="relative z-10 mx-auto max-w-3xl text-center">
+        <p className="mb-3 text-lg tracking-wide text-foreground sm:text-xl md:mb-4 md:text-2xl">
+          Move With Clarity
+        </p>
 
-          <div className="mx-auto grid max-w-3xl grid-cols-1 gap-8 md:grid-cols-3">
-            <div className="flex items-center justify-center space-x-2 text-outer_space-500 dark:text-platinum-500">
-              <CheckCircle className="text-blue_munsell-500" size={20} />
-              <span>No Credit Card Required</span>
-            </div>
-            <div className="flex items-center justify-center space-x-2 text-outer_space-500 dark:text-platinum-500">
-              <Users className="text-blue_munsell-500" size={20} />
-              <span>Team Collaboration</span>
-            </div>
-            <div className="flex items-center justify-center space-x-2 text-outer_space-500 dark:text-platinum-500">
-              <Zap className="text-blue_munsell-500" size={20} />
-              <span>Real-time Updates</span>
-            </div>
-          </div>
-        </div>
+        <h1 className="mb-5 font-display text-4xl font-bold leading-[1.08] tracking-tight sm:text-5xl md:mb-6 md:text-7xl lg:text-8xl">
+          Structure Your
+          <br />
+          Workflow
+        </h1>
+
+        <p className="mx-auto mb-8 max-w-md text-sm leading-relaxed sm:max-w-lg sm:text-base md:mb-10 md:max-w-xl md:text-lg">
+          Flow Like Operations Engineering — where your team&apos;s work moves with intention, not
+          friction.
+        </p>
+
+        <Link
+          href="/sign-up"
+          className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg sm:px-7 sm:text-base"
+        >
+          Get Started Free
+          <ArrowRight size={16} />
+        </Link>
       </div>
     </section>
   )

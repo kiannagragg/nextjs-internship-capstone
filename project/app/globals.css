@@ -4,66 +4,111 @@
 
 @layer base {
   :root {
-    /* Shadcn required variables - neutral base */
+    /* ---- FLOE brand accent ---- */
+    --brand: 222 92% 57%;
+    --brand-hex: #2d6ef7;
+
+    /* ---- Shadcn design tokens — light ---- */
     --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
+    --foreground: 0 0% 0%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
+    --card-foreground: 0 0% 0%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 96%;
     --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 0 0% 96%;
     --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 92%;
+    --input: 0 0% 92%;
+    --ring: 222 92% 57%;
     --radius: 0.5rem;
 
-    /* Custom color palette variables */
-    --platinum: #dcdcdd;
-    --french-gray: #c5c3c6;
-    --outer-space: #46494c;
-    --paynes-gray: #4c5c68;
-    --blue-munsell: #1985a1;
+    /* Surface layers */
+    --surface: 0 0% 98%;
+    --surface-hover: 0 0% 95%;
   }
 
   .dark {
-    /* Shadcn required variables - dark mode */
-    --background: 0 0% 3.9%;
+    --brand: 222 92% 62%;
+
+    --background: 0 0% 4%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
+    --card: 0 0% 6%;
     --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
+    --popover: 0 0% 6%;
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
+    --primary-foreground: 0 0% 4%;
+    --secondary: 0 0% 12%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 0 0% 12%;
     --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62% 30%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
+    --ring: 222 92% 62%;
 
-    /* Dark theme color adjustments */
+    --surface: 0 0% 7%;
+    --surface-hover: 0 0% 10%;
+  }
+
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Apply display font (Syne) to all headings automatically */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display), sans-serif;
   }
 }
 
-/* Custom scrollbar styles */
+/* ---- Brand & surface utility classes ---- */
+@layer utilities {
+  .text-brand {
+    color: hsl(var(--brand));
+  }
+
+  .bg-brand {
+    background-color: hsl(var(--brand));
+  }
+
+  .border-brand {
+    border-color: hsl(var(--brand));
+  }
+
+  .ring-brand {
+    --tw-ring-color: hsl(var(--brand));
+  }
+
+  .bg-surface {
+    background-color: hsl(var(--surface));
+  }
+
+  .bg-surface-hover {
+    background-color: hsl(var(--surface-hover));
+  }
+}
+
+/* ---- Custom scrollbar ---- */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--french-gray) transparent;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -75,6 +120,31 @@
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: var(--french-gray);
+  background-color: hsl(var(--muted-foreground) / 0.3);
   border-radius: 3px;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---- Decorative SVG curve animation (landing page) ---- */
+@keyframes draw-line {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-draw {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: draw-line 2s ease-out forwards;
 }
