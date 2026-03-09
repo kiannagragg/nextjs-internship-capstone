@@ -6,6 +6,7 @@ import { DM_Sans, Syne } from "next/font/google"
 import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
 import { ThemeProvider } from "@/components/shared/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${syne.variable}`}>
         <body className="font-body">
           <ThemeProvider>{children}</ThemeProvider>
+          <Toaster />
         </body>
       </html>
     </ClerkProvider>

@@ -61,6 +61,7 @@ export async function RecentActivity() {
 
   return (
     <div className="rounded-xl border border-border bg-card p-6">
+      {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-display text-base font-semibold text-foreground">Recent Activity</h2>
         <button className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
@@ -68,10 +69,11 @@ export async function RecentActivity() {
         </button>
       </div>
 
+      {/* Scrollable list */}
       {activities.length === 0 ? (
         <p className="text-sm text-muted-foreground">No recent activity.</p>
       ) : (
-        <div className="space-y-1">
+        <div className="scrollbar-thin max-h-96 space-y-1 overflow-y-auto">
           {activities.map((activity) => {
             const userName =
               `${activity.user.firstName || "Unknown"} ${activity.user.lastName || "User"}`.trim()

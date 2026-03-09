@@ -81,6 +81,8 @@ export const activityEntityTypeEnum = pgEnum("activity_entity_type", [
   "member",
 ])
 
+export const projectVisibilityEnum = pgEnum("project_visibility", ["public", "private"])
+
 /* ==================== USERS ==================== */
 /* Synced from Clerk via webhook (Task 2.5) */
 
@@ -117,6 +119,7 @@ export const projects = pgTable(
     color: text("color").default("#2D6EF7").notNull(),
     status: projectStatusEnum("status").default("active").notNull(),
     priority: projectPriorityEnum("priority").default("medium").notNull(),
+    visibility: projectVisibilityEnum("visibility").default("private").notNull(),
     startDate: timestamp("start_date", { withTimezone: true }),
     dueDate: timestamp("due_date", { withTimezone: true }),
     isArchived: boolean("is_archived").default(false).notNull(),

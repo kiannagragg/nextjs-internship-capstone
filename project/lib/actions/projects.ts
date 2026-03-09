@@ -12,6 +12,7 @@ import {
   setProjectStatus,
   togglePinProject,
   getUserProjectRole,
+  createProjectInvitations, // <-- Imported our new function
 } from "@/lib/db/queries/projects"
 
 /**
@@ -33,14 +34,32 @@ export async function createProjectAction(formData: FormData) {
     }
 
     // 1. Separate invites from the project data so Drizzle doesn't crash
-    const { invites, ...projectData } = parsed.data
+    const { invites, startDate, dueDate, ...projectData } = parsed.data
+
+    // Transform string dates to Date objects if they exist
+    const projectInsertData = {
+      ...projectData,
+      startDate: startDate ? new Date(startDate) : null,
+      dueDate: dueDate ? new Date(dueDate) : null,
+    }
 
     // 2. Create the project
-    const project = await createProject(projectData, userId)
+    const project = await createProject(projectInsertData as any, userId)
 
-    // TODO: Parse `invites` JSON and insert into your project_invitations table here if needed
+    // 3. Handle invites (Parse JSON string from FormData)
+    if (invites) {
+      try {
+        const parsedInvites = JSON.parse(invites)
+        if (Array.isArray(parsedInvites) && parsedInvites.length > 0) {
+          await createProjectInvitations(project.id, userId, parsedInvites)
 
-    // 3. Revalidate cache and return the ID
+          // TODO: (Optional) Trigger an email service like Resend here to actually
+          // send the emails with the generated tokens!
+        }
+      } catch (parseError) {}
+    }
+
+    // 4. Revalidate cache and return the ID
     revalidatePath("/projects", "layout")
     return { success: true, projectId: project.id }
   } catch (error) {
@@ -76,8 +95,16 @@ export async function updateProjectAction(projectId: string, formData: FormData)
       }
     }
 
+    // Format dates correctly for Drizzle
+    const { startDate, dueDate, ...restData } = parsed.data
+    const updateData = {
+      ...restData,
+      ...(startDate !== undefined && { startDate: startDate ? new Date(startDate) : null }),
+      ...(dueDate !== undefined && { dueDate: dueDate ? new Date(dueDate) : null }),
+    }
+
     // 3. Database Mutation
-    await updateProject(projectId, parsed.data, userId)
+    await updateProject(projectId, updateData as any, userId)
 
     // 4. Revalidate cache
     revalidatePath("/projects", "layout")

@@ -25,8 +25,10 @@ const baseProjectSchema = z.object({
       message: "Priority must be low, medium, or high",
     })
     .optional(),
+  visibility: z.enum(["public", "private"]).default("private"),
   startDate: dateHelper,
   dueDate: dateHelper,
+  invites: z.string().optional(),
 })
 
 // 2. Extract the date refinement logic so it can be reused safely

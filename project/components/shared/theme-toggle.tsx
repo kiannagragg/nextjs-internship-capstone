@@ -1,10 +1,20 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
 import { Moon, Sun } from "lucide-react"
 import { useTheme } from "./theme-provider"
+import { useEffect, useState } from "react"
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Render nothing until mounted to avoid hydration mismatch
+  if (!mounted) return null
 
   return (
     <button

@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, count, sql } from "drizzle-orm"
+import { eq, and, desc, asc, count, sql, or, exists } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   projects,
@@ -7,6 +7,7 @@ import {
   tasks,
   activityLogs,
   users,
+  projectInvitations,
   type NewProject,
 } from "@/lib/db/schema"
 
@@ -62,9 +63,28 @@ export async function getProjectsByUserId(userId: string) {
  * Get a single project by ID with full details.
  * Used for the Kanban board page.
  */
-export async function getProjectById(projectId: string) {
+export async function getProjectById(projectId: string, userId?: string | null) {
   const project = await db.query.projects.findFirst({
-    where: eq(projects.id, projectId),
+    where: and(
+      // 1. Must match the requested project ID
+      eq(projects.id, projectId),
+
+      // 2. Access Control: Must be public OR user must be a member
+      or(
+        eq(projects.visibility, "public"),
+        userId
+          ? exists(
+              db
+                .select()
+                .from(projectMembers)
+                .where(
+                  and(eq(projectMembers.projectId, projects.id), eq(projectMembers.userId, userId))
+                )
+            )
+          : // If no userId is provided, this condition evaluates to false
+            eq(projects.id, "impossible_condition_to_fail_safely")
+      )
+    ),
     with: {
       createdBy: true,
       members: {
@@ -98,7 +118,11 @@ export async function getUserProjectRole(projectId: string, userId: string) {
  * Wraps everything in a single operation for consistency.
  */
 export async function createProject(
-  data: Pick<NewProject, "title" | "description" | "color" | "priority" | "startDate" | "dueDate">,
+  // Added visibility to Pick
+  data: Pick<
+    NewProject,
+    "title" | "description" | "color" | "priority" | "visibility" | "startDate" | "dueDate"
+  >,
   creatorId: string
 ) {
   // Insert the project
@@ -152,6 +176,35 @@ export async function createProject(
 }
 
 /**
+ * Create project invitations for emails.
+ * NEW FUNCTION
+ */
+export async function createProjectInvitations(
+  projectId: string,
+  inviterId: string,
+  invites: { email: string; role: "admin" | "contributor" | "viewer" }[]
+) {
+  if (!invites || invites.length === 0) return
+
+  const expirationDate = new Date()
+  expirationDate.setDate(expirationDate.getDate() + 7) // Expires in 7 days
+
+  const inviteRecords = invites.map((invite) => ({
+    projectId,
+    invitedByUserId: inviterId,
+    email: invite.email,
+    role: invite.role,
+    token: crypto.randomUUID(), // Generates unique secure token
+    expiresAt: expirationDate,
+    status: "pending" as const,
+  }))
+
+  await db.insert(projectInvitations).values(inviteRecords)
+
+  // Optional: You could log a single activity for inviting multiple people here
+}
+
+/**
  * Update project details.
  */
 export async function updateProject(
@@ -163,6 +216,7 @@ export async function updateProject(
       | "description"
       | "color"
       | "priority"
+      | "visibility" // <-- Added visibility here
       | "status"
       | "startDate"
       | "dueDate"
