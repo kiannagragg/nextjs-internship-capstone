@@ -56,6 +56,7 @@ export type ProjectCardData = Project & {
     tasks: number
     completedTasks: number
   }
+  isPinned: boolean
 }
 
 /** List with its tasks (for Kanban board) */

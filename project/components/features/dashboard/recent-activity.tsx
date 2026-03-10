@@ -2,6 +2,33 @@ import Link from "next/link"
 import { requireAuth } from "@/lib/auth"
 import { getActivityForUser } from "@/lib/db/queries/activity"
 
+// --- Types ---
+
+// 1. Strictly type the actions based on your switch statement
+type ActivityAction =
+  | "created"
+  | "updated"
+  | "deleted"
+  | "moved"
+  | "completed"
+  | "restored"
+  | "assigned"
+  | "unassigned"
+  | "commented"
+  | "invited"
+  | "removed"
+  | "role_changed"
+
+// 2. Define the expected shape of the JSON metadata
+interface ActivityMetadata {
+  title?: string
+  taskTitle?: string
+  to?: string
+  role?: string
+  newRole?: string
+  [key: string]: any // Allows flexibility for other JSON properties
+}
+
 // --- Helper Functions ---
 
 function getInitials(firstName: string | null, lastName: string | null) {
@@ -20,7 +47,12 @@ function formatRelativeTime(date: Date) {
   return `${Math.floor(diffInSeconds / 86400)} days ago`
 }
 
-function formatActivityMessage(action: string, entityType: string, metadata: any) {
+// 3. Apply the types to the function parameters
+function formatActivityMessage(
+  action: ActivityAction | string, // Allows string fallback if db has legacy data
+  entityType: string,
+  metadata: ActivityMetadata | null
+) {
   const title = metadata?.title || metadata?.taskTitle || "an item"
 
   switch (action) {
@@ -78,10 +110,12 @@ export async function RecentActivity() {
             const userName =
               `${activity.user.firstName || "Unknown"} ${activity.user.lastName || "User"}`.trim()
             const initials = getInitials(activity.user.firstName, activity.user.lastName)
+
+            // 4. Cast the metadata to our new type when passing it to the helper
             const actionMessage = formatActivityMessage(
               activity.action,
               activity.entityType,
-              activity.metadata
+              activity.metadata as ActivityMetadata | null
             )
             const timeAgo = formatRelativeTime(activity.createdAt)
 
@@ -112,9 +146,9 @@ export async function RecentActivity() {
                       >
                         <span
                           className="h-1.5 w-1.5 rounded-full"
-                          style={{ backgroundColor: activity.project.color || "#2D6EF7" }}
+                          style={{ backgroundColor: activity.project?.color || "#2D6EF7" }}
                         />
-                        {activity.project.title}
+                        {activity.project?.title}
                       </Link>
                     </p>
                   </div>

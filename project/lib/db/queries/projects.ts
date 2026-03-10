@@ -238,7 +238,7 @@ export async function updateProject(
       action: "updated",
       entityType: "project",
       entityId: projectId,
-      metadata: data,
+      metadata: { ...data, title: updated.title },
     })
   }
 
