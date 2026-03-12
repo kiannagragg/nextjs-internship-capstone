@@ -63,6 +63,7 @@ export const activityActionEnum = pgEnum("activity_action", [
   "deleted",
   "moved",
   "archived",
+  "unarchived",
   "restored",
   "completed",
   "assigned",
@@ -338,9 +339,7 @@ export const activityLogs = pgTable(
   "activity_logs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

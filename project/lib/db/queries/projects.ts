@@ -10,7 +10,7 @@ import {
   projectInvitations,
   type NewProject,
 } from "@/lib/db/schema"
-
+import { logActivity } from "./activity"
 /**
  * Get all projects a user is a member of.
  * Filters, searches, and sorts directly at the database level using Drizzle.
@@ -127,6 +127,18 @@ export async function getProjectById(projectId: string, userId?: string | null) 
         },
       },
       labels: true,
+      lists: {
+        orderBy: (lists, { asc }) => [asc(lists.position)],
+        with: {
+          tasks: {
+            orderBy: (tasks, { asc }) => [asc(tasks.position)],
+            with: {
+              assignees: { with: { user: true } },
+              labels: { with: { label: true } },
+            },
+          },
+        },
+      },
     },
   })
 
@@ -181,10 +193,10 @@ export async function createProject(
 
   // Create default lists
   const defaultLists = [
-    { title: "To Do", position: 0 },
-    { title: "In Progress", position: 1000 },
-    { title: "Review", position: 2000 },
-    { title: "Done", position: 3000 },
+    { title: "To Do", position: 0, color: "#2D6EF7" },
+    { title: "In Progress", position: 1000, color: "#F59E0B" },
+    { title: "Review", position: 2000, color: "#8B5CF6" },
+    { title: "Done", position: 3000, color: "#10B981" },
   ]
 
   await db.insert(lists).values(
@@ -282,15 +294,53 @@ export async function updateProject(
  * Delete a project. CASCADE handles all related data.
  */
 export async function deleteProject(projectId: string, userId: string) {
-  // Log before delete (since cascade will remove the log too if we don't)
+  const [project] = await db
+    .select({ title: projects.title })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+
+  if (!project) throw new Error("Project not found")
+
   await db.delete(projects).where(eq(projects.id, projectId))
+
+  await logActivity({
+    projectId: null,
+    userId,
+    action: "deleted",
+    entityType: "project",
+    entityId: projectId,
+    metadata: { title: project.title },
+  })
 }
 
 /**
  * Archive/unarchive a project.
  */
 export async function archiveProject(projectId: string, isArchived: boolean, userId: string) {
-  return updateProject(projectId, { isArchived }, userId)
+  const [updatedProject] = await db
+    .update(projects)
+    .set({
+      isArchived,
+      updatedAt: new Date(),
+    })
+    .where(eq(projects.id, projectId))
+    .returning()
+
+  if (!updatedProject) throw new Error("Project not found")
+
+  const actionString = isArchived ? "archived" : "unarchived"
+
+  // Replaced 'logActivity' with your standard Drizzle insert
+  await db.insert(activityLogs).values({
+    projectId,
+    userId,
+    action: actionString,
+    entityType: "project",
+    entityId: projectId,
+    metadata: { title: updatedProject.title },
+  })
+
+  return updatedProject
 }
 
 /**

@@ -9,6 +9,8 @@ type ActivityAction =
   | "created"
   | "updated"
   | "deleted"
+  | "archived"
+  | "unarchived"
   | "moved"
   | "completed"
   | "restored"
@@ -49,7 +51,7 @@ function formatRelativeTime(date: Date) {
 
 // 3. Apply the types to the function parameters
 function formatActivityMessage(
-  action: ActivityAction | string, // Allows string fallback if db has legacy data
+  action: ActivityAction | string,
   entityType: string,
   metadata: ActivityMetadata | null
 ) {
@@ -80,6 +82,10 @@ function formatActivityMessage(
       return `removed a member`
     case "role_changed":
       return `changed a member's role to ${metadata?.newRole}`
+    case "archived":
+      return `archived ${entityType} "${title}"`
+    case "unarchived":
+      return `unarchived ${entityType} "${title}"`
     default:
       return `modified a ${entityType}`
   }

@@ -1,43 +1,58 @@
 import { z } from "zod"
 
-export const createTaskSchema = z
-  .object({
-    title: z
-      .string()
-      .min(1, "Task title is required")
-      .max(200, "Task title must be 200 characters or less"),
-    description: z.string().optional().nullable(),
-    priority: z
-      .enum(["low", "medium", "high"], {
-        message: "Priority must be low, medium, or high",
-      })
-      .optional(),
-    listId: z.string().uuid("Invalid List ID"),
-    projectId: z.string().uuid("Invalid Project ID"),
-    startDate: z.coerce.date().optional().nullable(),
-    dueDate: z.coerce.date().optional().nullable(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.startDate && data.dueDate && data.dueDate < data.startDate) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Due date must be after the start date",
-        path: ["dueDate"],
-      })
-    }
-  })
+const baseTaskSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().optional().nullable(),
+  priority: z.enum(["low", "medium", "high"]).optional(),
+  startDate: z.date().optional().nullable(),
+  dueDate: z.date().optional().nullable(),
+  listId: z.string(),
+  projectId: z.string(),
+})
 
-export const updateTaskSchema = createTaskSchema
-  .pick({ title: true, description: true, priority: true, startDate: true, dueDate: true })
+export const createTaskSchema = baseTaskSchema.refine(
+  (data) => {
+    // Example: your existing refinement logic goes here
+    if (data.startDate && data.dueDate) {
+      return data.dueDate >= data.startDate
+    }
+    return true
+  },
+  {
+    message: "Due date must be after start date",
+    path: ["dueDate"],
+  }
+)
+
+export const updateTaskSchema = baseTaskSchema
+  .pick({
+    title: true,
+    description: true,
+    priority: true,
+    startDate: true,
+    dueDate: true,
+  })
   .extend({
     isCompleted: z.boolean().optional(),
   })
-  .partial()
+  // If updateTaskSchema also needs the date validation, add it here too!
+  .refine(
+    (data) => {
+      if (data.startDate && data.dueDate) {
+        return data.dueDate >= data.startDate
+      }
+      return true
+    },
+    {
+      message: "Due date must be after start date",
+      path: ["dueDate"],
+    }
+  )
 
 export const moveTaskSchema = z.object({
   taskId: z.string().uuid("Invalid Task ID"),
   targetListId: z.string().uuid("Invalid Target List ID"),
-  position: z.number().int("Position must be an integer"),
+  position: z.number().min(0, "Position must be 0 or greater"),
 })
 
 export const assignTaskSchema = z.object({

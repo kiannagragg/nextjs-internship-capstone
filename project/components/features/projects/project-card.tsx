@@ -86,7 +86,7 @@ import {
   setProjectStatusAction,
   deleteProjectAction,
   archiveProjectAction,
-} from "@/lib/actions/projects" // Adjusted to your actions path
+} from "@/lib/actions/projects"
 
 // --- Helpers ---
 
@@ -233,6 +233,11 @@ export function ProjectCard({ project }: ProjectCardProps) {
       <div
         className={`group relative flex flex-col justify-between rounded-xl border border-border bg-card shadow-sm transition-all hover:shadow-md ${isCardBusy ? "pointer-events-none opacity-70" : ""}`}
       >
+        <Link
+          href={`/projects/${project.id}`}
+          className="absolute inset-0 z-0"
+          aria-label={`View ${project.title} board`}
+        />
         <div
           className="absolute left-0 top-0 h-2 w-full rounded-t-xl"
           style={{ backgroundColor: project.color || "#2D6EF7" }}
@@ -241,11 +246,11 @@ export function ProjectCard({ project }: ProjectCardProps) {
         <div className="flex flex-col p-5 pt-6">
           <div className="mb-2 flex items-start justify-between gap-4">
             <div className="space-y-1.5">
-              <Link href={`/projects/${project.id}`} className="hover:underline">
+              <Link href={`/projects/${project.id}`} className="relative z-10 hover:underline">
                 <h3 className="line-clamp-1 text-lg font-bold text-foreground">{project.title}</h3>
               </Link>
 
-              {/* NEW: Visibility Badge */}
+              {/* Visibility Badge */}
               <div className="flex w-fit items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 {project.visibility === "private" ? (
                   <>
@@ -264,7 +269,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="shrink-0 text-muted-foreground hover:text-foreground focus:outline-none disabled:opacity-50"
+                  className="relative z-10 shrink-0 text-muted-foreground hover:text-foreground focus:outline-none disabled:opacity-50"
                   disabled={isCardBusy}
                 >
                   <MoreHorizontal size={20} />

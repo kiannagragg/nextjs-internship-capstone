@@ -5,7 +5,7 @@
 
 import { eq, and, count, sql, gte, inArray, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { projects, projectMembers, tasks, users } from "@/lib/db/schema"
+import { projects, projectMembers, tasks } from "@/lib/db/schema"
 
 /**
  * Get dashboard stats for a user.
@@ -112,7 +112,14 @@ export async function getDashboardStats(userId: string) {
  */
 export async function getRecentProjects(userId: string, limit = 5) {
   const memberships = await db.query.projectMembers.findMany({
-    where: eq(projectMembers.userId, userId),
+    where: and(
+      eq(projectMembers.userId, userId),
+      // NEW: Subquery to only keep memberships if the project is NOT archived
+      inArray(
+        projectMembers.projectId,
+        db.select({ id: projects.id }).from(projects).where(eq(projects.isArchived, false))
+      )
+    ),
     with: {
       project: {
         with: {
