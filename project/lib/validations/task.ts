@@ -3,7 +3,7 @@ import { z } from "zod"
 const baseTaskSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional().nullable(),
-  priority: z.enum(["low", "medium", "high"]).optional(),
+  priority: z.enum(["low", "medium", "high"]).optional().nullable(),
   startDate: z.date().optional().nullable(),
   dueDate: z.date().optional().nullable(),
   listId: z.string(),

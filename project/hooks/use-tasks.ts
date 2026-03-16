@@ -62,84 +62,180 @@ export function useTasks(projectId: string) {
 */
 
 // Placeholder to prevent import errors
-import { useTransition } from "react"
-import { useBoardStore } from "@/stores/board-store"
-import { createTaskAction, deleteTaskAction } from "@/lib/actions/tasks"
+"use client"
+
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useToast } from "@/hooks/use-toast"
-import type { TaskWithAssignees } from "@/types"
+import {
+  createTaskAction,
+  updateTaskAction,
+  deleteTaskAction,
+  moveTaskAction,
+} from "@/lib/actions/tasks"
+import type { ListWithTasks, TaskWithAssignees } from "@/types"
 
-export function useTasks() {
-  const [isPending, startTransition] = useTransition()
+export function useTasks(projectId: string) {
+  const queryClient = useQueryClient()
   const { toast } = useToast()
+  const queryKey = ["project-lists", projectId]
 
-  // Bring in your Zustand store actions
-  const { addTaskOptimistic, removeTaskOptimistic, lists } = useBoardStore()
+  const createMutation = useMutation({
+    mutationFn: (data: any) => createTaskAction(data),
+    onMutate: async (newTaskData) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
 
-  const createTask = (title: string, listId: string, projectId: string, currentUserId: string) => {
-    const tempTaskId = `temp-${crypto.randomUUID()}`
-
-    // 1. Optimistic Update Payload
-    const optimisticTask: TaskWithAssignees = {
-      id: tempTaskId,
-      title,
-      description: null,
-      priority: "medium",
-      isCompleted: false,
-      position: lists.find((l) => l.id === listId)?.tasks.length || 0,
-      startDate: null,
-      dueDate: null,
-      createdById: currentUserId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      completedAt: null,
-      listId,
-      projectId,
-      assignees: [],
-      labels: [],
-    }
-
-    // Instantly update UI
-    addTaskOptimistic(listId, optimisticTask)
-
-    // 2. Server Action
-    startTransition(async () => {
-      const result = await createTaskAction({ title, listId, projectId })
-
-      if (result?.error) {
-        // Rollback on error
-        removeTaskOptimistic(tempTaskId)
-        toast({
-          variant: "destructive",
-          title: "Failed to create task",
-          description: result.error,
-        })
+      const tempTask: TaskWithAssignees = {
+        id: `temp-${Date.now()}`,
+        title: newTaskData.title,
+        description: newTaskData.description || null,
+        priority: newTaskData.priority || "medium",
+        position: 999999,
+        isCompleted: false,
+        completedAt: null,
+        startDate: null,
+        dueDate: null,
+        listId: newTaskData.listId,
+        projectId: newTaskData.projectId,
+        createdById: "temp-user",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        version: 1,
+        assignees: [],
+        labels: [],
       }
-    })
-  }
 
-  const deleteTask = (taskId: string, projectId: string) => {
-    // 1. Optimistic Update
-    removeTaskOptimistic(taskId)
-
-    // 2. Server Action
-    startTransition(async () => {
-      const result = await deleteTaskAction(taskId, projectId)
-
-      if (result?.error) {
-        // If it fails, ideally we'd re-sync the board data to get the task back
-        toast({
-          variant: "destructive",
-          title: "Failed to delete task",
-          description: result.error,
+      queryClient.setQueryData<ListWithTasks[]>(queryKey, (old) => {
+        if (!old) return []
+        return old.map((list) => {
+          if (list.id === newTaskData.listId) {
+            return { ...list, tasks: [...list.tasks, tempTask] }
+          }
+          return list
         })
-      } else {
-        toast({
-          title: "Task deleted",
-          description: "Task has been removed successfully.",
-        })
-      }
-    })
-  }
+      })
 
-  return { createTask, deleteTask, isPending }
+      return { previousLists }
+    },
+    onSuccess: (result) => {
+      if (result?.error) throw new Error(result.error)
+      queryClient.invalidateQueries({ queryKey })
+      toast({ title: "Task created" })
+    },
+    onError: (err: any, _, context) => {
+      queryClient.setQueryData(queryKey, context?.previousLists)
+      toast({ variant: "destructive", title: "Failed to create task", description: err.message })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ taskId, data }: { taskId: string; data: any }) =>
+      updateTaskAction(taskId, projectId, data),
+    onMutate: async ({ taskId, data }) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
+
+      queryClient.setQueryData<ListWithTasks[]>(queryKey, (old) => {
+        if (!old) return []
+        return old.map((list) => ({
+          ...list,
+          tasks: list.tasks.map((task) => (task.id === taskId ? { ...task, ...data } : task)),
+        }))
+      })
+
+      return { previousLists }
+    },
+    onSuccess: (result) => {
+      if (result?.error) throw new Error(result.error)
+    },
+    onError: (err: any, _, context) => {
+      queryClient.setQueryData(queryKey, context?.previousLists)
+      toast({ variant: "destructive", title: "Failed to update task", description: err.message })
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (taskId: string) => deleteTaskAction(taskId, projectId),
+    onMutate: async (taskId) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
+
+      queryClient.setQueryData<ListWithTasks[]>(queryKey, (old) => {
+        if (!old) return []
+        return old.map((list) => ({
+          ...list,
+          tasks: list.tasks.filter((task) => task.id !== taskId),
+        }))
+      })
+
+      return { previousLists }
+    },
+    onSuccess: (result) => {
+      if (result?.error) throw new Error(result.error)
+      toast({ title: "Task deleted" })
+    },
+    onError: (err: any, _, context) => {
+      queryClient.setQueryData(queryKey, context?.previousLists)
+      toast({ variant: "destructive", title: "Failed to delete task", description: err.message })
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  })
+
+  const moveMutation = useMutation({
+    mutationFn: (data: { taskId: string; targetListId: string; position: number }) =>
+      moveTaskAction(data, projectId),
+    onMutate: async ({ taskId, targetListId, position }) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
+
+      queryClient.setQueryData<ListWithTasks[]>(queryKey, (old) => {
+        if (!old) return []
+
+        let taskToMove: TaskWithAssignees | undefined
+        old.forEach((list) => {
+          const found = list.tasks.find((t) => t.id === taskId)
+          if (found) taskToMove = { ...found, listId: targetListId, position }
+        })
+
+        if (!taskToMove) return old
+
+        // Remove from old list, add to new list, and sort
+        return old.map((list) => {
+          // Remove from source list
+          let newTasks = list.tasks.filter((t) => t.id !== taskId)
+
+          // Add to target list
+          if (list.id === targetListId) {
+            newTasks.push(taskToMove!)
+            // Re-sort array based on fractional position
+            newTasks.sort((a, b) => a.position - b.position)
+          }
+
+          return { ...list, tasks: newTasks }
+        })
+      })
+
+      return { previousLists }
+    },
+    onSuccess: (result) => {
+      if (result?.error) throw new Error(result.error)
+    },
+    onError: (err: any, _, context) => {
+      queryClient.setQueryData(queryKey, context?.previousLists)
+      toast({ variant: "destructive", title: "Failed to move task", description: err.message })
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  })
+
+  return {
+    createTask: createMutation.mutateAsync,
+    isCreatingTask: createMutation.isPending,
+    updateTask: updateMutation.mutateAsync,
+    isUpdatingTask: updateMutation.isPending,
+    deleteTask: deleteMutation.mutateAsync,
+    isDeletingTask: deleteMutation.isPending,
+    moveTask: moveMutation.mutateAsync,
+    isMovingTask: moveMutation.isPending,
+  }
 }

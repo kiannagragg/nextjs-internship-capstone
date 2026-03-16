@@ -12,6 +12,7 @@ import {
   jsonb,
   uniqueIndex,
   index,
+  doublePrecision,
 } from "drizzle-orm/pg-core"
 
 /* ==================== ENUMS ==================== */
@@ -198,8 +199,9 @@ export const tasks = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     description: text("description"),
-    priority: taskPriorityEnum("priority").default("medium").notNull(),
-    position: integer("position").notNull().default(0),
+    priority: taskPriorityEnum("priority"),
+    position: doublePrecision("position").notNull().default(0),
+    version: integer("version").notNull().default(1),
     isCompleted: boolean("is_completed").default(false).notNull(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     startDate: timestamp("start_date", { withTimezone: true }),

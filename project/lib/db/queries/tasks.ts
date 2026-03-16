@@ -65,7 +65,6 @@ export async function getTaskById(taskId: string) {
 
 /**
  * Create a new task in a list.
- * Position defaults to end of list (max + 1000).
  */
 export async function createTask(
   data: Pick<NewTask, "title" | "description" | "priority" | "startDate" | "dueDate">,
@@ -73,7 +72,16 @@ export async function createTask(
   projectId: string,
   createdById: string
 ) {
-  // Find the highest position in the list
+  const [targetList] = await db
+    .select({ type: lists.type })
+    .from(lists)
+    .where(eq(lists.id, listId))
+    .limit(1)
+
+  if (!targetList) throw new Error("List not found")
+
+  const isCompleted = targetList.type === "done"
+
   const existingTasks = await db
     .select({ position: tasks.position })
     .from(tasks)
@@ -81,7 +89,7 @@ export async function createTask(
     .orderBy(desc(tasks.position))
     .limit(1)
 
-  const maxPosition = existingTasks[0]?.position ?? -1000
+  const maxPosition = existingTasks[0]?.position ?? 0
 
   const [task] = await db
     .insert(tasks)
@@ -90,11 +98,12 @@ export async function createTask(
       listId,
       projectId,
       createdById,
-      position: maxPosition + 1000,
+      position: maxPosition + 1024,
+      isCompleted,
+      completedAt: isCompleted ? new Date() : null,
     })
     .returning()
 
-  // SAFETY CHECK
   if (!task) {
     throw new Error("Failed to create task. Database returned undefined.")
   }
@@ -105,7 +114,7 @@ export async function createTask(
     action: "created",
     entityType: "task",
     entityId: task.id,
-    metadata: { title: task.title },
+    metadata: { title: task.title, listType: targetList.type },
   })
 
   return task
@@ -164,7 +173,7 @@ export async function deleteTask(taskId: string, userId: string) {
 
 /**
  * Move a task to a different list and/or position.
- * Used by dnd-kit drag-and-drop.
+ * Applies fractional ordering and enforces workflow rules.
  */
 export async function moveTask(
   taskId: string,
@@ -172,7 +181,6 @@ export async function moveTask(
   position: number,
   userId: string
 ) {
-  // Get current task state for the activity log
   const [currentTask] = await db
     .select({
       listId: tasks.listId,
@@ -185,27 +193,36 @@ export async function moveTask(
 
   if (!currentTask) return null
 
-  // Get list names for the activity log
-  const [fromList] = await db
-    .select({ title: lists.title })
-    .from(lists)
-    .where(eq(lists.id, currentTask.listId))
-    .limit(1)
-
   const [toList] = await db
-    .select({ title: lists.title })
+    .select({ title: lists.title, type: lists.type })
     .from(lists)
     .where(eq(lists.id, targetListId))
     .limit(1)
 
+  if (!toList) throw new Error("Target list not found")
+
+  const isNowCompleted = toList.type === "done"
+
   const [updated] = await db
     .update(tasks)
-    .set({ listId: targetListId, position })
+    .set({
+      listId: targetListId,
+      position,
+      isCompleted: isNowCompleted,
+      completedAt: isNowCompleted ? new Date() : null,
+      version: sql`${tasks.version} + 1`,
+    })
     .where(eq(tasks.id, taskId))
     .returning()
 
   // Only log if the list actually changed (not just reordering within same list)
   if (currentTask.listId !== targetListId) {
+    const [fromList] = await db
+      .select({ title: lists.title })
+      .from(lists)
+      .where(eq(lists.id, currentTask.listId))
+      .limit(1)
+
     await db.insert(activityLogs).values({
       projectId: currentTask.projectId,
       userId,
@@ -218,6 +235,7 @@ export async function moveTask(
         to: toList?.title ?? "Unknown",
         fromListId: currentTask.listId,
         toListId: targetListId,
+        wasCompleted: isNowCompleted,
       },
     })
   }

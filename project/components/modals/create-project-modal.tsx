@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import Image from "next/image"
+import { DatePicker } from "@/components/shared/date-picker"
 
 const PROJECT_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#6B7280"]
 
@@ -47,6 +48,9 @@ export function CreateProjectModal() {
   const [invites, setInvites] = useState<{ email: string; role: string }[]>([])
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState("contributor")
+
+  const [startDate, setStartDate] = useState<Date | undefined>()
+  const [dueDate, setDueDate] = useState<Date | undefined>()
 
   const handleAddInvite = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -126,6 +130,8 @@ export function CreateProjectModal() {
         <form action={handleSubmit} className="space-y-6">
           <input type="hidden" name="color" value={selectedColor} />
           <input type="hidden" name="invites" value={JSON.stringify(invites)} />
+          <input type="hidden" name="startDate" value={startDate ? startDate.toISOString() : ""} />
+          <input type="hidden" name="dueDate" value={dueDate ? dueDate.toISOString() : ""} />
 
           {/* Row 1: Project Name */}
           <div className="space-y-2">
@@ -224,24 +230,36 @@ export function CreateProjectModal() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Start Date</label>
-              <Input
-                type="date"
-                name="startDate"
+
+              <DatePicker
+                value={startDate}
+                onChange={setStartDate}
+                placeholder="Select start date"
                 disabled={isCreating}
-                className={`${fieldErrors.startDate ? "border-destructive focus-visible:ring-destructive" : ""} text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert`}
+                className={
+                  fieldErrors.startDate ? "border-destructive focus-visible:ring-destructive" : ""
+                }
               />
+
               {fieldErrors.startDate && (
                 <p className="mt-1 text-xs text-destructive">{fieldErrors.startDate[0]}</p>
               )}
             </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Due Date</label>
-              <Input
-                type="date"
-                name="dueDate"
+
+              <DatePicker
+                value={dueDate}
+                onChange={setDueDate}
+                placeholder="Select due date"
                 disabled={isCreating}
-                className={`${fieldErrors.dueDate ? "border-destructive focus-visible:ring-destructive" : ""} text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert`}
+                className={
+                  fieldErrors.dueDate ? "border-destructive focus-visible:ring-destructive" : ""
+                }
+                disabledDates={(date) => (startDate ? date < startDate : false)}
               />
+
               {fieldErrors.dueDate && (
                 <p className="mt-1 text-xs text-destructive">{fieldErrors.dueDate[0]}</p>
               )}

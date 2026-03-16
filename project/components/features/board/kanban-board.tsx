@@ -36,6 +36,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+import { TaskCard } from "@/components/features/tasks/task-card"
+import { TaskSheet } from "../tasks/task-sheet"
 interface KanbanBoardProps {
   project: any
   initialLists: any[]
@@ -47,7 +49,7 @@ const PRESET_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#
 export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoardProps) {
   const projectId = project?.id
 
-  const { createTask, isPending: isTaskPending } = useTasks()
+  const { createTask, isCreatingTask: isTaskPending, deleteTask, updateTask } = useTasks(projectId)
   const {
     lists: queryLists,
     createList,
@@ -95,6 +97,10 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
 
   const [newTaskTitle, setNewTaskTitle] = useState("")
   const [addingTaskToListId, setAddingTaskToListId] = useState<string | null>(null)
+
+  const [newTaskPriority, setNewTaskPriority] = useState<string | null>(null)
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null)
+  const [selectedTask, setSelectedTask] = useState<any | null>(null)
 
   const taskInputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -163,7 +169,8 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
 
     setNewTaskTitle("")
     setAddingTaskToListId(null)
-    createTask(title, listId, projectId, currentUserId)
+    createTask({ title, listId, projectId, priority: newTaskPriority })
+    setNewTaskPriority(null)
   }
 
   const handleTaskKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>, listId: string) => {
@@ -327,7 +334,21 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
                 </div>
               )}
 
-              <div className="flex flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden p-3 pt-0">
+              <div className="flex flex-col gap-2 overflow-y-auto px-2 pb-2 pt-3">
+                {/* Render the actual task cards! */}
+                {list.tasks?.map((task: any) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onClick={(t) => {
+                      setSelectedTask(t)
+                    }}
+                    onDelete={(taskId) => {
+                      setTaskToDelete(taskId)
+                    }}
+                  />
+                ))}
+
                 {addingTaskToListId === list.id && (
                   <div className="mt-2 rounded-lg border bg-background p-2 shadow-sm">
                     <Textarea
@@ -338,31 +359,56 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
                       onKeyDown={(e) => handleTaskKeyDown(e, list.id)}
                       className="min-h-[60px] resize-none border-none bg-transparent p-1 text-sm text-foreground shadow-none focus-visible:ring-0"
                     />
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={() => handleCreateTask(list.id)}
-                        disabled={isTaskPending || !newTaskTitle.trim()}
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => handleCreateTask(list.id)}
+                          disabled={isTaskPending || !newTaskTitle.trim()}
+                        >
+                          {isTaskPending ? (
+                            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          ) : (
+                            "Add Card"
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-foreground"
+                          onClick={() => {
+                            setAddingTaskToListId(null)
+                            setNewTaskTitle("")
+                            setNewTaskPriority(null)
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                      <Select
+                        value={newTaskPriority || "none"}
+                        onValueChange={(val) => setNewTaskPriority(val === "none" ? null : val)}
                       >
-                        {isTaskPending ? (
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        ) : (
-                          "Add Card"
-                        )}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs text-foreground"
-                        onClick={() => {
-                          setAddingTaskToListId(null)
-                          setNewTaskTitle("")
-                        }}
-                      >
-                        Cancel
-                      </Button>
+                        <SelectTrigger className="h-7 w-[90px] text-[10px] uppercase tracking-wider text-foreground">
+                          <SelectValue placeholder="Priority" />
+                        </SelectTrigger>
+                        <SelectContent className="text-foreground">
+                          <SelectItem value="none" className="text-muted-foreground">
+                            No Priority
+                          </SelectItem>
+                          <SelectItem value="low" className="text-foreground">
+                            Low
+                          </SelectItem>
+                          <SelectItem value="medium" className="text-foreground">
+                            Medium
+                          </SelectItem>
+                          <SelectItem value="high" className="text-foreground">
+                            High
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 )}
@@ -481,34 +527,37 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="text-foreground">Delete List</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              {listToDelete?.taskCount && listToDelete.taskCount > 0 ? (
-                <div className="space-y-4">
-                  <p>
-                    This list contains <strong>{listToDelete.taskCount} tasks</strong>. Deleting it
-                    will also delete those tasks unless you migrate them. Where should we move them?
+            <AlertDialogDescription asChild>
+              <div className="text-sm text-muted-foreground">
+                {listToDelete?.taskCount && listToDelete.taskCount > 0 ? (
+                  <div className="mt-2 space-y-4">
+                    <p>
+                      This list contains <strong>{listToDelete.taskCount} tasks</strong>. Deleting
+                      it will also delete those tasks unless you migrate them. Where should we move
+                      them?
+                    </p>
+                    <Select value={migrationListId} onValueChange={setMigrationListId}>
+                      <SelectTrigger className="text-foreground">
+                        <SelectValue placeholder="Select destination list..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {storeLists
+                          .filter((l) => l.id !== listToDelete.id)
+                          .map((l) => (
+                            <SelectItem key={l.id} value={l.id}>
+                              {l.title}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <p className="mt-2">
+                    Are you sure you want to delete the <strong>{listToDelete?.title}</strong> list?
+                    This cannot be undone.
                   </p>
-                  <Select value={migrationListId} onValueChange={setMigrationListId}>
-                    <SelectTrigger className="text-foreground">
-                      <SelectValue placeholder="Select destination list..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {storeLists
-                        .filter((l) => l.id !== listToDelete.id)
-                        .map((l) => (
-                          <SelectItem key={l.id} value={l.id}>
-                            {l.title}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <>
-                  Are you sure you want to delete the <strong>{listToDelete?.title}</strong> list?
-                  This cannot be undone.
-                </>
-              )}
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -532,6 +581,40 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog open={!!taskToDelete} onOpenChange={() => setTaskToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">Delete Task</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              Are you sure you want to delete this task? This action cannot be undone and will
+              remove all associated comments and assignments.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="text-foreground">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (taskToDelete) {
+                  deleteTask(taskToDelete)
+                  setTaskToDelete(null)
+                }
+              }}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Delete Task
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <TaskSheet
+        key={selectedTask?.id || "empty-sheet"}
+        task={selectedTask}
+        isOpen={!!selectedTask}
+        onClose={() => setSelectedTask(null)}
+        updateTask={updateTask}
+      />
     </>
   )
 }

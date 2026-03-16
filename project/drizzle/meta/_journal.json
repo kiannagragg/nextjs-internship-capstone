@@ -22,6 +22,13 @@
       "when": 1773578762445,
       "tag": "0002_tranquil_micromacro",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773626194673,
+      "tag": "0003_odd_joystick",
+      "breakpoints": true
     }
   ]
 }

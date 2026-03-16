@@ -15,13 +15,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+
 interface TaskCardProps {
   task: TaskWithAssignees
   onClick?: (task: TaskWithAssignees) => void
+  onDelete?: (taskId: string) => void // 👈 Added this prop
 }
 
-export function TaskCard({ task, onClick }: TaskCardProps) {
+export function TaskCard({ task, onClick, onDelete }: TaskCardProps) {
   const { toast } = useToast()
+
   const getPriorityColor = (priority: string | null) => {
     switch (priority) {
       case "high":
@@ -56,7 +59,9 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
   return (
     <div
       onClick={() => onClick?.(task)}
-      className="group relative mb-2 flex cursor-pointer flex-col gap-3 rounded-md border bg-card p-3 shadow-sm transition-all hover:ring-1 hover:ring-primary"
+      className={`group relative mb-2 flex cursor-pointer flex-col gap-3 rounded-md border bg-card p-3 shadow-sm transition-all hover:ring-1 hover:ring-primary ${
+        task.isCompleted ? "opacity-60" : "opacity-100" // 👈 Visual fade for completed tasks
+      }`}
     >
       {/* Top Row: Priority Badge & Actions */}
       <div className="flex items-start justify-between">
@@ -71,14 +76,13 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
           <div />
         )}
 
-        {/* --- UPDATED: Dropdown Menu Wrapper --- */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
               className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
-              onClick={(e) => e.stopPropagation()} // Prevent card click
+              onClick={(e) => e.stopPropagation()}
             >
               <MoreHorizontal size={14} className="text-muted-foreground" />
             </Button>
@@ -102,8 +106,7 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
               className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
               onClick={(e) => {
                 e.stopPropagation()
-                // TODO: Wire up delete action
-                console.log("Delete clicked for", task.id)
+                onDelete?.(task.id) // 👈 Wire up delete
               }}
             >
               <Trash className="mr-2 h-4 w-4" />
@@ -114,7 +117,11 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
       </div>
 
       {/* Task Title */}
-      <h4 className="line-clamp-2 text-sm font-medium leading-snug text-card-foreground">
+      <h4
+        className={`line-clamp-2 text-sm font-medium leading-snug ${
+          task.isCompleted ? "text-muted-foreground line-through" : "text-card-foreground"
+        }`}
+      >
         {task.title}
       </h4>
 

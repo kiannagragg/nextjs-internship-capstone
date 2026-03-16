@@ -25,13 +25,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const PROJECT_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#6B7280"]
+import { DatePicker } from "@/components/shared/date-picker"
 
-// Helper to format Date objects for native HTML <input type="date">
-const formatDateForInput = (date?: Date | string | null) => {
-  if (!date) return ""
-  return new Date(date).toISOString().split("T")[0]
-}
+const PROJECT_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#6B7280"]
 
 export function EditProjectModal() {
   const { isEditProjectModalOpen, closeEditProjectModal, editingProject } = useUIStore()
@@ -44,14 +40,21 @@ export function EditProjectModal() {
   const [error, setError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({})
 
-  // React Best Practice: Update state during render instead of inside useEffect
-  // to avoid cascading renders (fixes the ESLint warning)
   const [prevIsOpen, setPrevIsOpen] = useState(isEditProjectModalOpen)
+
+  const [startDate, setStartDate] = useState<Date | undefined>(
+    editingProject?.startDate ? new Date(editingProject.startDate) : undefined
+  )
+  const [dueDate, setDueDate] = useState<Date | undefined>(
+    editingProject?.dueDate ? new Date(editingProject.dueDate) : undefined
+  )
 
   if (isEditProjectModalOpen !== prevIsOpen) {
     setPrevIsOpen(isEditProjectModalOpen)
     if (isEditProjectModalOpen && editingProject) {
       setSelectedColor(editingProject.color || PROJECT_COLORS[0])
+      setStartDate(editingProject.startDate ? new Date(editingProject.startDate) : undefined)
+      setDueDate(editingProject.dueDate ? new Date(editingProject.dueDate) : undefined)
       setError(null)
       setFieldErrors({})
     }
@@ -114,6 +117,8 @@ export function EditProjectModal() {
 
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
           <input type="hidden" name="color" value={selectedColor} />
+          <input type="hidden" name="startDate" value={startDate ? startDate.toISOString() : ""} />
+          <input type="hidden" name="dueDate" value={dueDate ? dueDate.toISOString() : ""} />
 
           {/* Row 1: Project Name */}
           <div className="space-y-2">
@@ -232,26 +237,36 @@ export function EditProjectModal() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Start Date</label>
-              <Input
-                type="date"
-                name="startDate"
+
+              <DatePicker
+                value={startDate}
+                onChange={setStartDate}
+                placeholder="Select start date"
                 disabled={isUpdating}
-                defaultValue={formatDateForInput(editingProject.startDate)}
-                className={`${fieldErrors.startDate ? "border-destructive focus-visible:ring-destructive" : ""} text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert`}
+                className={
+                  fieldErrors.startDate ? "border-destructive focus-visible:ring-destructive" : ""
+                }
               />
+
               {fieldErrors.startDate && (
                 <p className="mt-1 text-xs text-destructive">{fieldErrors.startDate[0]}</p>
               )}
             </div>
+
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Due Date</label>
-              <Input
-                type="date"
-                name="dueDate"
+
+              <DatePicker
+                value={dueDate}
+                onChange={setDueDate}
+                placeholder="Select due date"
                 disabled={isUpdating}
-                defaultValue={formatDateForInput(editingProject.dueDate)}
-                className={`${fieldErrors.dueDate ? "border-destructive focus-visible:ring-destructive" : ""} text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert`}
+                className={
+                  fieldErrors.dueDate ? "border-destructive focus-visible:ring-destructive" : ""
+                }
+                disabledDates={(date) => (startDate ? date < startDate : false)}
               />
+
               {fieldErrors.dueDate && (
                 <p className="mt-1 text-xs text-destructive">{fieldErrors.dueDate[0]}</p>
               )}
