@@ -1,42 +1,6 @@
-// TODO: Task 4.5 - Design and implement project cards and layouts
-
-/*
-TODO: Implementation Notes for Interns:
-
-This component should display:
-- Project name and description
-- Progress indicator
-- Team member count
-- Due date
-- Status badge
-- Actions menu (edit, delete, etc.)
-
-Props interface:
-interface ProjectCardProps {
-  project: {
-    id: string
-    name: string
-    description?: string
-    progress: number
-    memberCount: number
-    dueDate?: Date
-    status: 'active' | 'completed' | 'on-hold'
-  }
-  onEdit?: (id: string) => void
-  onDelete?: (id: string) => void
-}
-
-Features to implement:
-- Hover effects
-- Click to navigate to project board
-- Responsive design
-- Loading states
-- Error states
-*/
-
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import Link from "next/link"
 import {
   MoreHorizontal,
@@ -80,20 +44,10 @@ import { useProjects } from "@/hooks/use-projects"
 import { useToast } from "@/hooks/use-toast"
 import { useUIStore } from "@/stores/ui-store"
 
-// Server Actions
-import {
-  togglePinProjectAction,
-  setProjectStatusAction,
-  deleteProjectAction,
-  archiveProjectAction,
-} from "@/lib/actions/projects"
-
 // --- Helpers ---
 
 function getInitials(firstName?: string | null, lastName?: string | null) {
-  const first = firstName?.[0] || ""
-  const last = lastName?.[0] || ""
-  return (first + last).toUpperCase() || "U"
+  return ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U"
 }
 
 function formatDate(date: Date | string) {
@@ -104,134 +58,115 @@ function formatDate(date: Date | string) {
   }).format(new Date(date))
 }
 
+function calculateProgress(counts?: { tasks?: number; completedTasks?: number }) {
+  const total = counts?.tasks || 0
+  const completed = counts?.completedTasks || 0
+  const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
+  return { total, completed, percent }
+}
+
+function getProjectDateStatus(project: ProjectCardData) {
+  if (project.status === "completed") {
+    return {
+      label: `Completed • ${formatDate(project.updatedAt)}`,
+      color: "text-muted-foreground",
+      icon: CheckCircle2,
+    }
+  }
+
+  if (project.dueDate) {
+    const due = new Date(project.dueDate)
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    due.setHours(0, 0, 0, 0)
+
+    const diffTime = due.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+    if (diffDays < 0) {
+      return {
+        label: `Overdue • ${formatDate(project.dueDate)}`,
+        color: "text-red-500 font-medium",
+        icon: AlertCircle,
+      }
+    }
+
+    return {
+      label: `${diffDays} days left • ${formatDate(project.dueDate)}`,
+      color: "text-emerald-600 dark:text-emerald-400 font-medium",
+      icon: Calendar,
+    }
+  }
+
+  return {
+    label: `Updated • ${formatDate(project.updatedAt)}`,
+    color: "text-muted-foreground",
+    icon: Clock,
+  }
+}
+
+const PRIORITY_STYLES = {
+  high: "bg-red-500/10 text-red-600 dark:text-red-400",
+  medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  low: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+}
+
+// --- Component ---
+
 type ProjectCardProps = {
   project: ProjectCardData & { memberRole?: string }
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
   const { toast } = useToast()
-
-  const [isPending, startTransition] = useTransition()
   const { openEditProjectModal } = useUIStore()
-  const { deleteProject, isDeleting } = useProjects()
+
+  const { deleteProject, isDeleting, togglePin, toggleStatus, toggleArchive } = useProjects()
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-
-  // RBAC Check
   const isAdmin = project.memberRole === "admin"
+  const isCardBusy = isDeleting
 
-  // --- Handlers for Server Actions ---
+  // --- Handlers ---
 
-  const handleTogglePin = () => {
-    startTransition(async () => {
-      await togglePinProjectAction(project.id, project.isPinned)
-    })
-  }
+  // Pass the CURRENT pin state. The server action flips it internally.
+  const handleTogglePin = () => togglePin({ id: project.id, currentPinState: project.isPinned })
 
   const handleToggleStatus = () => {
-    startTransition(async () => {
-      const newStatus = project.status === "completed" ? "active" : "completed"
-      await setProjectStatusAction(project.id, newStatus)
-
-      toast({
-        title: "Status updated!",
-        description: "The Project Status has been updated.",
-      })
-    })
+    const newStatus = project.status === "completed" ? "active" : "completed"
+    toggleStatus({ id: project.id, status: newStatus })
   }
 
-  const handleCopyLink = () => {
-    const url = `${window.location.origin}/projects/${project.id}`
-    navigator.clipboard.writeText(url)
+  const handleToggleArchive = () =>
+    toggleArchive({ id: project.id, isArchived: !project.isArchived })
 
-    toast({
-      title: "Link copied!",
-      description: "Project link has been copied to your clipboard.",
-    })
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/projects/${project.id}`)
+    toast({ title: "Link copied!", description: "Project link has been copied to your clipboard." })
   }
 
   const handleDeleteConfirm = async (e: React.MouseEvent) => {
     e.preventDefault()
-
     try {
       await deleteProject(project.id)
       setShowDeleteDialog(false)
-
-      toast({
-        title: "Project deleted",
-        description: "The project has been permanently removed.",
-      })
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Failed to delete project",
-        description: error?.error || "An unexpected error occurred. Please try again.",
-      })
+      // Errors are handled by the hook's toast notifications
     }
   }
 
-  // --- Computed UI Data ---
-
-  const totalTasks = project._count?.tasks || 0
-  const completedTasks = project._count?.completedTasks || 0
-  const progressPercent = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100)
-
-  const getDateInfo = () => {
-    if (project.status === "completed") {
-      return {
-        label: `Completed • ${formatDate(project.updatedAt)}`,
-        color: "text-muted-foreground",
-        icon: CheckCircle2,
-      }
-    }
-
-    if (project.dueDate) {
-      const due = new Date(project.dueDate)
-      const now = new Date()
-      now.setHours(0, 0, 0, 0)
-      due.setHours(0, 0, 0, 0)
-
-      const diffTime = due.getTime() - now.getTime()
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-      if (diffDays < 0) {
-        return {
-          label: `Overdue • ${formatDate(project.dueDate)}`,
-          color: "text-red-500 font-medium",
-          icon: AlertCircle,
-        }
-      }
-
-      return {
-        label: `${diffDays} days left • ${formatDate(project.dueDate)}`,
-        color: "text-emerald-600 dark:text-emerald-400 font-medium",
-        icon: Calendar,
-      }
-    }
-
-    return {
-      label: `Updated • ${formatDate(project.updatedAt)}`,
-      color: "text-muted-foreground",
-      icon: Clock,
-    }
-  }
-
-  const dateInfo = getDateInfo()
+  // --- Pre-computed View Data ---
+  const progress = calculateProgress(project._count)
+  const dateInfo = getProjectDateStatus(project)
   const displayMembers = project.members?.slice(0, 3) || []
   const remainingMembers = (project.members?.length || 0) - 3
-
-  const priorityStyles = {
-    high: "bg-red-500/10 text-red-600 dark:text-red-400",
-    medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    low: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  }
-
-  const isCardBusy = isPending || isDeleting
 
   return (
     <>
       <div
-        className={`group relative flex flex-col justify-between rounded-xl border border-border bg-card shadow-sm transition-all hover:shadow-md ${isCardBusy ? "pointer-events-none opacity-70" : ""}`}
+        className={`group relative flex flex-col justify-between rounded-xl border border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/30 hover:shadow-md ${
+          isCardBusy ? "pointer-events-none opacity-70" : ""
+        }`}
       >
         <Link
           href={`/projects/${project.id}`}
@@ -239,15 +174,15 @@ export function ProjectCard({ project }: ProjectCardProps) {
           aria-label={`View ${project.title} board`}
         />
         <div
-          className="absolute left-0 top-0 h-2 w-full rounded-t-xl"
+          className="absolute left-0 top-0 h-2 w-full rounded-t-xl transition-opacity group-hover:opacity-90"
           style={{ backgroundColor: project.color || "#2D6EF7" }}
         />
 
         <div className="flex flex-col p-5 pt-6">
           <div className="mb-2 flex items-start justify-between gap-4">
             <div className="space-y-1.5">
-              <Link href={`/projects/${project.id}`} className="relative z-10 hover:underline">
-                <h3 className="line-clamp-1 text-lg font-bold text-foreground">{project.title}</h3>
+              <Link href={`/projects/${project.id}`} className="relative z-0 hover:underline">
+                <h3 className="line-clamp-1 text-xl font-bold text-foreground">{project.title}</h3>
               </Link>
 
               {/* Visibility Badge */}
@@ -269,7 +204,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="relative z-10 shrink-0 text-muted-foreground hover:text-foreground focus:outline-none disabled:opacity-50"
+                  className="relative z-10 shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none disabled:opacity-50"
                   disabled={isCardBusy}
                 >
                   <MoreHorizontal size={20} />
@@ -306,33 +241,15 @@ export function ProjectCard({ project }: ProjectCardProps) {
                     >
                       <Edit className="mr-2 h-4 w-4" /> Edit Details
                     </DropdownMenuItem>
-                    {/* Import Upload or Undo icon from lucide-react at the top */}
-                    {project.isArchived ? (
-                      <DropdownMenuItem
-                        className="cursor-pointer"
-                        onClick={() =>
-                          startTransition(() => {
-                            // Assuming false means "unarchive"
-                            archiveProjectAction(project.id, false)
-                          })
-                        }
-                      >
-                        <Upload className="mr-2 h-4 w-4" /> Unarchive
-                      </DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuItem
-                        className="cursor-pointer"
-                        onClick={() =>
-                          startTransition(() => {
-                            archiveProjectAction(project.id, true)
-                          })
-                        }
-                      >
-                        <Archive className="mr-2 h-4 w-4" /> Archive
-                      </DropdownMenuItem>
-                    )}
+                    <DropdownMenuItem className="cursor-pointer" onClick={handleToggleArchive}>
+                      {project.isArchived ? (
+                        <Upload className="mr-2 h-4 w-4" />
+                      ) : (
+                        <Archive className="mr-2 h-4 w-4" />
+                      )}
+                      {project.isArchived ? "Unarchive" : "Archive"}
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    {/* TRIGGER DELETE MODAL HERE */}
                     <DropdownMenuItem
                       className="cursor-pointer text-red-600 focus:bg-red-50 focus:text-red-600 dark:focus:bg-red-950/50"
                       onClick={() => setShowDeleteDialog(true)}
@@ -346,21 +263,21 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </div>
 
           <p className="mb-6 mt-2 line-clamp-2 min-h-[40px] text-sm text-muted-foreground">
-            {project.description || "No description provided."}
+            {project.description}
           </p>
 
           <div className="mb-4">
             <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground">
               <span>Progress</span>
               <span className="text-foreground">
-                {progressPercent}% ({completedTasks}/{totalTasks})
+                {progress.percent}% ({progress.completed}/{progress.total})
               </span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
               <div
                 className="h-full rounded-full transition-all duration-500"
                 style={{
-                  width: `${progressPercent}%`,
+                  width: `${progress.percent}%`,
                   backgroundColor: project.color || "#2D6EF7",
                 }}
               />
@@ -369,7 +286,11 @@ export function ProjectCard({ project }: ProjectCardProps) {
 
           <div className="flex flex-wrap gap-2">
             <span
-              className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium capitalize ${project.status === "active" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "bg-slate-500/10 text-slate-700 dark:text-slate-400"}`}
+              className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium capitalize ${
+                project.status === "active"
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                  : "bg-slate-500/10 text-slate-700 dark:text-slate-400"
+              }`}
             >
               {project.status === "active" && (
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -377,7 +298,10 @@ export function ProjectCard({ project }: ProjectCardProps) {
               {project.status}
             </span>
             <span
-              className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium capitalize ${priorityStyles[project.priority as keyof typeof priorityStyles] || priorityStyles.medium}`}
+              className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium capitalize ${
+                PRIORITY_STYLES[project.priority as keyof typeof PRIORITY_STYLES] ||
+                PRIORITY_STYLES.medium
+              }`}
             >
               {project.priority}
             </span>
@@ -389,13 +313,14 @@ export function ProjectCard({ project }: ProjectCardProps) {
             {displayMembers.map((member) => (
               <div
                 key={member.user.id}
-                className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-background bg-foreground text-[10px] font-bold text-background"
+                className="relative z-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-background bg-foreground text-[10px] font-bold text-background transition-transform hover:z-10 hover:scale-110"
+                title={`${member.user.firstName} ${member.user.lastName}`}
               >
                 {getInitials(member.user.firstName, member.user.lastName)}
               </div>
             ))}
             {remainingMembers > 0 && (
-              <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-secondary text-[10px] font-bold text-secondary-foreground">
+              <div className="relative z-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-secondary text-[10px] font-bold text-secondary-foreground transition-transform hover:z-10 hover:scale-110">
                 +{remainingMembers}
               </div>
             )}

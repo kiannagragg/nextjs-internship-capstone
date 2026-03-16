@@ -16,7 +16,7 @@ export function CreateProjectButton({ children, className }: CreateProjectButton
       onClick={openCreateProjectModal}
       className={
         className ||
-        "inline-flex items-center rounded-lg bg-foreground px-3 py-3 text-primary-foreground transition-colors hover:bg-foreground/70"
+        "py-2x inline-flex items-center rounded-lg bg-foreground px-3 py-2 font-medium text-primary-foreground transition-colors hover:bg-foreground/70"
       }
     >
       {children || (

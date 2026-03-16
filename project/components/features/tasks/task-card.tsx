@@ -1,19 +1,27 @@
 "use client"
 
-import { Calendar, MoreHorizontal } from "lucide-react"
+import { Calendar, MoreHorizontal, Edit, Copy, Trash } from "lucide-react"
 import { TaskWithAssignees } from "@/types"
 
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { useToast } from "@/hooks/use-toast"
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 interface TaskCardProps {
   task: TaskWithAssignees
   onClick?: (task: TaskWithAssignees) => void
 }
 
 export function TaskCard({ task, onClick }: TaskCardProps) {
-  // Helper to determine priority badge colors
+  const { toast } = useToast()
   const getPriorityColor = (priority: string | null) => {
     switch (priority) {
       case "high":
@@ -27,11 +35,21 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
     }
   }
 
-  // Native JS date formatter (e.g., "Oct 12")
   const formatDate = (dateString: Date | string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
+    })
+  }
+
+  const handleCopyLink = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const url = `${window.location.origin}/projects/${task.projectId}?taskId=${task.id}`
+    navigator.clipboard.writeText(url)
+
+    toast({
+      title: "Link copied!",
+      description: "Task link has been copied to your clipboard.",
     })
   }
 
@@ -50,20 +68,49 @@ export function TaskCard({ task, onClick }: TaskCardProps) {
             {task.priority}
           </Badge>
         ) : (
-          <div /> // Spacer if no priority
+          <div />
         )}
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
-          onClick={(e) => {
-            e.stopPropagation()
-            // TODO: Open quick actions menu
-          }}
-        >
-          <MoreHorizontal size={14} className="text-muted-foreground" />
-        </Button>
+        {/* --- UPDATED: Dropdown Menu Wrapper --- */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
+              onClick={(e) => e.stopPropagation()} // Prevent card click
+            >
+              <MoreHorizontal size={14} className="text-muted-foreground" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation()
+                onClick?.(task)
+              }}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit Details
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleCopyLink}>
+              <Copy className="mr-2 h-4 w-4" />
+              Copy Link
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
+              onClick={(e) => {
+                e.stopPropagation()
+                // TODO: Wire up delete action
+                console.log("Delete clicked for", task.id)
+              }}
+            >
+              <Trash className="mr-2 h-4 w-4" />
+              Delete Task
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Task Title */}

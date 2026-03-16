@@ -1,13 +1,19 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { eq, and } from "drizzle-orm"
+import { eq, and, count } from "drizzle-orm"
 import { z } from "zod"
 
 import { db } from "@/lib/db"
 import { lists, projectMembers } from "@/lib/db/schema"
 import { requireAuth } from "@/lib/auth"
-import { createList, updateList, deleteList, reorderLists } from "@/lib/db/queries/lists"
+import {
+  getListsByProjectId,
+  createList,
+  updateList,
+  deleteList,
+  reorderLists,
+} from "@/lib/db/queries/lists"
 import {
   createListSchema,
   updateListSchema,
@@ -26,33 +32,58 @@ async function verifyProjectAccess(projectId: string, userId: string) {
     .limit(1)
 
   if (!membership) throw new Error("Unauthorized: Not a member of this project")
-
   return membership.role
 }
 
+// Counts how many "done" lists currently exist in the project
+async function getDoneListCount(projectId: string) {
+  const [res] = await db
+    .select({ value: count() })
+    .from(lists)
+    .where(and(eq(lists.projectId, projectId), eq(lists.type, "done")))
+
+  return res?.value ?? 0
+}
+
 // --- SERVER ACTIONS ---
+export async function getProjectListsAction(projectId: string) {
+  try {
+    const { dbUserId } = await requireAuth()
+
+    // Optional: Check if user has access to this project before returning data
+    await verifyProjectAccess(projectId, dbUserId)
+
+    const lists = await getListsByProjectId(projectId)
+    return { data: lists }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Failed to fetch lists" }
+  }
+}
 
 export async function createListAction(data: CreateListInput) {
   try {
     const { dbUserId } = await requireAuth()
-
-    // 1. Validate Input
     const parsed = createListSchema.parse(data)
 
-    // 2. Check RBAC (Viewers cannot create lists)
+    // Check RBAC (Viewers cannot create lists)
     const role = await verifyProjectAccess(parsed.projectId, dbUserId)
     if (role === "viewer") {
       throw new Error("Unauthorized: Viewers cannot create lists")
     }
 
-    // 3. Mutate
+    if (parsed.type === "done") {
+      const doneCount = await getDoneListCount(parsed.projectId)
+      if (doneCount > 0) throw new Error("A 'Done' list already exists in this project.")
+    }
+
+    // Mutate
     const list = await createList(
-      { title: parsed.title, color: parsed.color },
+      { title: parsed.title, color: parsed.color, type: parsed.type },
       parsed.projectId,
       dbUserId
     )
 
-    // 4. Revalidate
+    // Revalidate
     revalidatePath(`/projects/${parsed.projectId}`)
     return { list }
   } catch (error) {
@@ -66,26 +97,34 @@ export async function updateListAction(listId: string, projectId: string, data: 
     const { dbUserId } = await requireAuth()
     const parsed = updateListSchema.parse(data)
 
-    // 1. Fetch the list to check ownership
     const [existingList] = await db
-      .select({ createdById: lists.createdById })
+      .select({ createdById: lists.createdById, type: lists.type })
       .from(lists)
       .where(eq(lists.id, listId))
       .limit(1)
 
     if (!existingList) throw new Error("List not found")
 
-    // 2. Check RBAC
     const role = await verifyProjectAccess(projectId, dbUserId)
     if (role === "viewer") throw new Error("Unauthorized: Viewers cannot edit lists")
     if (role === "contributor" && existingList.createdById !== dbUserId) {
       throw new Error("Unauthorized: Contributors can only edit lists they created")
     }
 
-    // 3. Mutate
+    if (parsed.type && parsed.type !== existingList.type) {
+      if (parsed.type === "done") {
+        const doneCount = await getDoneListCount(projectId)
+        if (doneCount > 0) throw new Error("A 'Done' list already exists.")
+      }
+      if (existingList.type === "done") {
+        const doneCount = await getDoneListCount(projectId)
+        if (doneCount <= 1)
+          throw new Error("Cannot change type. At least one 'Done' list must exist.")
+      }
+    }
+
     const updated = await updateList(listId, parsed, dbUserId)
 
-    // 4. Revalidate
     revalidatePath(`/projects/${projectId}`)
     return { list: updated }
   } catch (error) {
@@ -94,30 +133,36 @@ export async function updateListAction(listId: string, projectId: string, data: 
   }
 }
 
-export async function deleteListAction(listId: string, projectId: string) {
+export async function deleteListAction(
+  listId: string,
+  projectId: string,
+  migrationListId?: string
+) {
   try {
     const { dbUserId } = await requireAuth()
 
-    // 1. Fetch the list to check ownership
     const [existingList] = await db
-      .select({ createdById: lists.createdById })
+      .select({ createdById: lists.createdById, type: lists.type })
       .from(lists)
       .where(eq(lists.id, listId))
       .limit(1)
 
     if (!existingList) throw new Error("List not found")
 
-    // 2. Check RBAC
     const role = await verifyProjectAccess(projectId, dbUserId)
     if (role === "viewer") throw new Error("Unauthorized: Viewers cannot delete lists")
     if (role === "contributor" && existingList.createdById !== dbUserId) {
       throw new Error("Unauthorized: Contributors can only delete lists they created")
     }
 
-    // 3. Mutate
-    await deleteList(listId, dbUserId)
+    if (existingList.type === "done") {
+      const doneCount = await getDoneListCount(projectId)
+      if (doneCount <= 1)
+        throw new Error("Cannot delete the final 'Done' list. Completion logic must exist.")
+    }
 
-    // 4. Revalidate
+    await deleteList(listId, dbUserId, migrationListId)
+
     revalidatePath(`/projects/${projectId}`)
     return { success: true }
   } catch (error) {
@@ -130,16 +175,16 @@ export async function reorderListsAction(projectId: string, data: ReorderListsIn
     const { dbUserId } = await requireAuth()
     const parsed = reorderListsSchema.parse(data)
 
-    // 1. Check RBAC (Anyone but a viewer can reorganize the board)
+    // Check RBAC (Anyone but a viewer can reorganize the board)
     const role = await verifyProjectAccess(projectId, dbUserId)
     if (role === "viewer") {
       throw new Error("Unauthorized: Viewers cannot reorder lists")
     }
 
-    // 2. Mutate
+    // Mutate
     await reorderLists(parsed.updates)
 
-    // 3. Revalidate
+    // Revalidate
     revalidatePath(`/projects/${projectId}`)
     return { success: true }
   } catch (error) {

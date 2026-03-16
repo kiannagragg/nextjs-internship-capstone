@@ -15,6 +15,13 @@
       "when": 1773236234006,
       "tag": "0001_burly_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773578762445,
+      "tag": "0002_tranquil_micromacro",
+      "breakpoints": true
     }
   ]
 }

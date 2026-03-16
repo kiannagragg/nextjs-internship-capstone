@@ -1,22 +1,5 @@
 // DONE: Task 3.1 - Design database schema for users, projects, lists, and tasks
-// TODO: Task 3.3 - Set up Drizzle ORM with type-safe schema definitions
-
-/* ============================================
-   Tables (12):
-   - users (synced from Clerk)
-   - projects
-   - projectMembers (RBAC join table)
-   - lists (Kanban columns)
-   - tasks (with completion tracking)
-   - taskAssignees (many-to-many)
-   - labels (project-scoped)
-   - taskLabels (many-to-many)
-   - comments
-   - activityLogs
-   - projectInvitations
-   - notifications
-   ============================================ */
-
+// DONE: Task 3.3 - Set up Drizzle ORM with type-safe schema definitions
 import { relations } from "drizzle-orm"
 import {
   pgTable,
@@ -84,9 +67,10 @@ export const activityEntityTypeEnum = pgEnum("activity_entity_type", [
 
 export const projectVisibilityEnum = pgEnum("project_visibility", ["public", "private"])
 
+export const listTypeEnum = pgEnum("list_type", ["todo", "in_progress", "review", "done", "custom"])
+
 /* ==================== USERS ==================== */
 /* Synced from Clerk via webhook (Task 2.5) */
-
 export const users = pgTable(
   "users",
   {
@@ -176,6 +160,8 @@ export const lists = pgTable(
     title: text("title").notNull(),
     color: text("color"),
     position: integer("position").notNull().default(0),
+    type: listTypeEnum("type").default("custom").notNull(),
+    isSystem: boolean("is_system").default(false).notNull(),
     createdById: uuid("created_by_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

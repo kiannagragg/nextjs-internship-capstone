@@ -1,10 +1,10 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { redirect } from "next/navigation"
 import { createProjectSchema, updateProjectSchema } from "@/lib/validations/project"
 import { requireAuth } from "@/lib/auth"
 import {
+  getProjectsByUserId,
   createProject,
   updateProject,
   deleteProject,
@@ -12,8 +12,28 @@ import {
   setProjectStatus,
   togglePinProject,
   getUserProjectRole,
-  createProjectInvitations, // <-- Imported our new function
+  createProjectInvitations,
 } from "@/lib/db/queries/projects"
+import type { ProjectCardData } from "@/types/index"
+
+export async function getProjectsAction(searchParams?: {
+  query?: string
+  sort?: string
+  view?: string
+  page?: number
+}): Promise<{ success: true; data: ProjectCardData[] } | { success: false; error: string }> {
+  try {
+    const { dbUserId } = await requireAuth()
+
+    // Call the database query
+    const projects = await getProjectsByUserId(dbUserId, searchParams)
+
+    // Ensure the data shape matches your types
+    return { success: true, data: projects as unknown as ProjectCardData[] }
+  } catch (error: any) {
+    return { success: false, error: "Failed to load projects." }
+  }
+}
 
 /**
  * Creates a new project, establishes default lists, and assigns the creator as Admin.
@@ -33,17 +53,14 @@ export async function createProjectAction(formData: FormData) {
       }
     }
 
-    // 1. Separate invites from the project data so Drizzle doesn't crash
     const { invites, startDate, dueDate, ...projectData } = parsed.data
 
-    // Transform string dates to Date objects if they exist
     const projectInsertData = {
       ...projectData,
       startDate: startDate ? new Date(startDate) : null,
       dueDate: dueDate ? new Date(dueDate) : null,
     }
 
-    // 2. Create the project
     const project = await createProject(projectInsertData as any, userId)
 
     // 3. Handle invites (Parse JSON string from FormData)
@@ -59,7 +76,7 @@ export async function createProjectAction(formData: FormData) {
       } catch (parseError) {}
     }
 
-    // 4. Revalidate cache and return the ID
+    // Revalidate cache and return the ID
     revalidatePath("/projects", "layout")
     return { success: true, projectId: project.id }
   } catch (error) {

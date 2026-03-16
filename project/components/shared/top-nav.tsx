@@ -1,6 +1,6 @@
 "use client"
 
-import { UserButton } from "@clerk/nextjs"
+import { ClerkLoading, ClerkLoaded, UserButton } from "@clerk/nextjs"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { Menu, Bell } from "lucide-react"
 
@@ -19,10 +19,8 @@ export function TopNav({ onMenuClick }: TopNavProps) {
         <Menu size={20} />
       </button>
 
-      {/* Spacer — pushes right actions to the end */}
       <div className="flex-1" />
 
-      {/* Right actions */}
       <div className="flex items-center gap-4">
         <ThemeToggle />
 
@@ -30,14 +28,19 @@ export function TopNav({ onMenuClick }: TopNavProps) {
           <Bell size={18} />
         </button>
 
-        {/* Clerk UserButton — shows avatar, sign-out, manage account */}
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: "h-8 w-8",
-            },
-          }}
-        />
+        <ClerkLoading>
+          <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
+        </ClerkLoading>
+
+        <ClerkLoaded>
+          <UserButton
+            appearance={{
+              elements: {
+                avatarBox: "h-8 w-8",
+              },
+            }}
+          />
+        </ClerkLoaded>
       </div>
     </header>
   )

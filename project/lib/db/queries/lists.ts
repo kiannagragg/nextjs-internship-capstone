@@ -1,6 +1,6 @@
 import { eq, asc, and, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { lists, activityLogs, type NewList } from "@/lib/db/schema"
+import { lists, tasks, activityLogs, type NewList } from "@/lib/db/schema"
 
 /**
  * Get all lists for a project, ordered by position.
@@ -34,19 +34,17 @@ export async function getListsByProjectId(projectId: string) {
 
 /**
  * Create a new list in a project.
- * Position is set to the next available slot (max + 1000).
  */
 export async function createList(
-  data: Pick<NewList, "title" | "color">,
+  data: Pick<NewList, "title" | "color" | "type">, // Added type
   projectId: string,
   createdById: string
 ) {
-  // Find the highest position in the project
   const [maxList] = await db
     .select({ position: lists.position })
     .from(lists)
     .where(eq(lists.projectId, projectId))
-    .orderBy(desc(lists.position)) // Descending order puts the highest number first
+    .orderBy(desc(lists.position))
     .limit(1)
 
   const maxPosition = maxList?.position ?? -1000
@@ -61,10 +59,7 @@ export async function createList(
     })
     .returning()
 
-  // SAFETY CHECK: Fixes the "possibly 'undefined'" TypeScript errors
-  if (!list) {
-    throw new Error("Failed to create list. Database returned undefined.")
-  }
+  if (!list) throw new Error("Failed to create list.")
 
   await db.insert(activityLogs).values({
     projectId,
@@ -79,11 +74,11 @@ export async function createList(
 }
 
 /**
- * Update list details (rename, change color).
+ * Update list details (rename, change color, change type).
  */
 export async function updateList(
   listId: string,
-  data: Partial<Pick<NewList, "title" | "color">>,
+  data: Partial<Pick<NewList, "title" | "color" | "type">>, // Added type
   userId: string
 ) {
   const [updated] = await db.update(lists).set(data).where(eq(lists.id, listId)).returning()
@@ -98,15 +93,13 @@ export async function updateList(
       metadata: data,
     })
   }
-
   return updated ?? null
 }
 
 /**
- * Delete a list. CASCADE removes all tasks in the list.
+ * Delete a list. If migrationListId is provided, tasks are moved there safely.
  */
-export async function deleteList(listId: string, userId: string) {
-  // Get project ID before deleting for the activity log
+export async function deleteList(listId: string, userId: string, migrationListId?: string) {
   const [list] = await db
     .select({ projectId: lists.projectId, title: lists.title })
     .from(lists)
@@ -115,6 +108,12 @@ export async function deleteList(listId: string, userId: string) {
 
   if (!list) return
 
+  // MIGRATION LOGIC: Move tasks to the new list before deleting
+  if (migrationListId) {
+    await db.update(tasks).set({ listId: migrationListId }).where(eq(tasks.listId, listId))
+  }
+
+  // Delete the list
   await db.delete(lists).where(eq(lists.id, listId))
 
   await db.insert(activityLogs).values({
@@ -123,7 +122,7 @@ export async function deleteList(listId: string, userId: string) {
     action: "deleted",
     entityType: "list",
     entityId: listId,
-    metadata: { title: list.title },
+    metadata: { title: list.title, tasksMigrated: !!migrationListId },
   })
 }
 

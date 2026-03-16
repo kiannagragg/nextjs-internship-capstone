@@ -11,79 +11,88 @@ import {
   type NewProject,
 } from "@/lib/db/schema"
 import { logActivity } from "./activity"
+
 /**
  * Get all projects a user is a member of.
  * Filters, searches, and sorts directly at the database level using Drizzle.
  */
 export async function getProjectsByUserId(
   userId: string,
-  searchParams?: { query?: string; sort?: string; view?: string }
+  searchParams?: { query?: string; sort?: string; view?: string; page?: number; limit?: number }
 ) {
   const isArchivedView = searchParams?.view === "archived"
   const query = searchParams?.query || ""
-  const sortDirection = searchParams?.sort === "desc" ? desc : asc
+  const page = searchParams?.page || 1
+  const limit = searchParams?.limit || 20
+  const offset = (page - 1) * limit
 
-  // 1. Query the Database
+  // Dynamic sorting logic
+  let orderByLogic
+  switch (searchParams?.sort) {
+    case "newest":
+      orderByLogic = desc(projects.createdAt)
+      break
+    case "oldest":
+      orderByLogic = asc(projects.createdAt)
+      break
+    case "desc":
+      orderByLogic = desc(projects.title)
+      break
+    case "asc":
+    default:
+      orderByLogic = asc(projects.title)
+      break
+  }
+
+  // 1. Query the Database (Now with Pagination)
   const userProjects = await db.query.projects.findMany({
+    limit,
+    offset,
     where: and(
-      // A. User must be a member of the project
       exists(
         db
           .select()
           .from(projectMembers)
           .where(and(eq(projectMembers.projectId, projects.id), eq(projectMembers.userId, userId)))
       ),
-      // B. Filter by View (Active vs Archived)
       isArchivedView
         ? eq(projects.isArchived, true)
         : or(eq(projects.isArchived, false), sql`${projects.isArchived} IS NULL`),
-      // C. Search query (Database-level text matching)
       query
         ? or(ilike(projects.title, `%${query}%`), ilike(projects.description, `%${query}%`))
         : undefined
     ),
     with: {
-      members: {
-        with: {
-          user: true,
-        },
+      members: { with: { user: true } },
+      // Fetch tasks in the same query to avoid N+1 queries!
+      tasks: {
+        columns: { id: true, isCompleted: true },
       },
     },
-    orderBy: (projects) => [
-      // DB-level sorting by title
-      sortDirection(projects.title),
-    ],
+    orderBy: [orderByLogic],
   })
 
-  // 2. Enrich with task counts and specific user details
-  const enriched = await Promise.all(
-    userProjects.map(async (project) => {
-      // Find this specific user's membership details from the pre-fetched members list
-      const userMembership = project.members.find((m) => m.userId === userId)
+  // 2. Enrich data purely in memory (No extra DB calls!)
+  const enriched = userProjects.map((project) => {
+    const userMembership = project.members.find((m) => m.userId === userId)
 
-      const [taskStats] = await db
-        .select({
-          total: count(tasks.id),
-          completed: count(sql`CASE WHEN ${tasks.isCompleted} = true THEN 1 END`),
-        })
-        .from(tasks)
-        .where(eq(tasks.projectId, project.id))
+    // Calculate stats from the already-fetched tasks array
+    const totalTasks = project.tasks.length
+    const completedTasks = project.tasks.filter((t) => t.isCompleted).length
 
-      return {
-        ...project,
-        memberRole: userMembership?.role ?? "viewer",
-        isPinned: userMembership?.isPinned ?? false,
-        members: project.members,
-        _count: {
-          tasks: taskStats?.total ?? 0,
-          completedTasks: taskStats?.completed ?? 0,
-        },
-      }
-    })
-  )
+    return {
+      ...project,
+      memberRole: userMembership?.role ?? "viewer",
+      isPinned: userMembership?.isPinned ?? false,
+      members: project.members,
+      _count: {
+        tasks: totalTasks,
+        completedTasks: completedTasks,
+      },
+    }
+  })
 
-  // 3. Surface Pinned projects to the top.
-  // The rest of the array is already perfectly sorted A-Z/Z-A by the database.
+  // 3. Surface Pinned projects
   enriched.sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1
     if (!a.isPinned && b.isPinned) return 1
@@ -163,6 +172,10 @@ export async function getUserProjectRole(projectId: string, userId: string) {
  * Create a new project with default lists and admin membership.
  * Wraps everything in a single operation for consistency.
  */
+/**
+ * Create a new project with default lists and admin membership.
+ * Wraps everything in a single operation for consistency.
+ */
 export async function createProject(
   data: Pick<
     NewProject,
@@ -170,7 +183,7 @@ export async function createProject(
   >,
   creatorId: string
 ) {
-  // Insert the project
+  // 1. Insert the project
   const [project] = await db
     .insert(projects)
     .values({
@@ -179,24 +192,29 @@ export async function createProject(
     })
     .returning()
 
-  // SAFETY CHECK:
   if (!project) {
     throw new Error("Failed to create project. Database returned undefined.")
   }
 
-  // Add creator as admin
+  // 2. Add creator as admin
   await db.insert(projectMembers).values({
     projectId: project.id,
     userId: creatorId,
     role: "admin",
   })
 
-  // Create default lists
+  // 3. Create default SYSTEM lists with specific types
   const defaultLists = [
-    { title: "To Do", position: 0, color: "#2D6EF7" },
-    { title: "In Progress", position: 1000, color: "#F59E0B" },
-    { title: "Review", position: 2000, color: "#8B5CF6" },
-    { title: "Done", position: 3000, color: "#10B981" },
+    { title: "To Do", position: 0, color: "#64748B", type: "todo" as const, isSystem: true },
+    {
+      title: "In Progress",
+      position: 1000,
+      color: "#3B82F6",
+      type: "in_progress" as const,
+      isSystem: true,
+    },
+    { title: "Review", position: 2000, color: "#8B5CF6", type: "review" as const, isSystem: true },
+    { title: "Done", position: 3000, color: "#10B981", type: "done" as const, isSystem: true },
   ]
 
   await db.insert(lists).values(
@@ -207,7 +225,7 @@ export async function createProject(
     }))
   )
 
-  // Log activity
+  // 4. Log activity
   await db.insert(activityLogs).values({
     projectId: project.id,
     userId: creatorId,

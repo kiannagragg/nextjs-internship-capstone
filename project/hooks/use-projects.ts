@@ -56,75 +56,183 @@ Dependencies to install:
 */
 
 // Placeholder to prevent import errors
-import { useTransition } from "react"
+"use client"
+
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useToast } from "@/hooks/use-toast"
 import {
   createProjectAction,
   deleteProjectAction,
   updateProjectAction,
+  togglePinProjectAction,
+  setProjectStatusAction,
+  archiveProjectAction,
 } from "@/lib/actions/projects"
+import type { ProjectCardData } from "@/types/index"
+import { getProjectsAction } from "@/lib/actions/projects"
 
-export function useProjects() {
-  const [isCreating, startTransition] = useTransition()
-  const [isDeleting, startDeleteTransition] = useTransition()
-  const [isUpdating, startUpdateTransition] = useTransition()
+export function useProjects(searchParams?: Record<string, string>) {
+  const queryClient = useQueryClient()
+  const { toast } = useToast()
 
-  const createProject = async (formData: FormData) => {
-    return new Promise((resolve, reject) => {
-      startTransition(async () => {
-        try {
-          const result = await createProjectAction(formData)
-          if (result && !result.success) {
-            reject(result)
-          } else {
-            resolve(result)
-          }
-        } catch (error) {
-          reject({ error: "An unexpected error occurred." })
-        }
-      })
-    })
+  // FETCHING
+  const {
+    data: projects = [],
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
+    queryKey: ["projects", searchParams],
+    queryFn: async () => {
+      const result = await getProjectsAction(searchParams)
+      if (!result.success) throw new Error(result.error)
+      return result.data
+    },
+  })
+
+  // ✅ Helper: look up a single project's current state from the React Query cache.
+  // This lets components like project-header read live cache data instead of stale server props.
+  const getProjectFromCache = (projectId: string): ProjectCardData | undefined => {
+    const allQueries = queryClient.getQueriesData<ProjectCardData[]>({ queryKey: ["projects"] })
+    for (const [, data] of allQueries) {
+      const found = data?.find((p) => p.id === projectId)
+      if (found) return found
+    }
+    return undefined
   }
 
-  const deleteProject = async (projectId: string) => {
-    return new Promise((resolve, reject) => {
-      startDeleteTransition(async () => {
-        try {
-          const result = await deleteProjectAction(projectId)
-          if (result && !result.success) {
-            reject(result.error)
-          } else {
-            resolve(result)
-          }
-        } catch (error) {
-          reject(error)
+  // MUTATIONS
+  const createMutation = useMutation({
+    mutationFn: (formData: FormData) => createProjectAction(formData),
+    onSuccess: (result) => {
+      if (result.error || result.fieldErrors) {
+        if (result.error) {
+          toast({ variant: "destructive", title: "Creation failed", description: result.error })
         }
-      })
-    })
-  }
+        return
+      }
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+      toast({ title: "Project created!", description: "Your new project is ready." })
+    },
+    onError: (err: any) => {
+      toast({ variant: "destructive", title: "Creation failed", description: err.message })
+    },
+  })
 
-  const updateProject = async (projectId: string, formData: FormData) => {
-    return new Promise((resolve, reject) => {
-      startUpdateTransition(async () => {
-        try {
-          const result = await updateProjectAction(projectId, formData)
-          if (result && !result.success) {
-            reject(result)
-          } else {
-            resolve(result)
-          }
-        } catch (error) {
-          reject({ error: "An unexpected error occurred." })
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: FormData }) => updateProjectAction(id, data),
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({ queryKey: ["projects"] })
+      const previousProjects = queryClient.getQueryData(["projects"])
+
+      queryClient.setQueryData(["projects"], (old: any) =>
+        old?.map((p: any) => (p.id === id ? { ...p, title: data.get("title") } : p))
+      )
+      return { previousProjects }
+    },
+    onSuccess: (result) => {
+      if (result.error || result.fieldErrors) {
+        queryClient.invalidateQueries({ queryKey: ["projects"] })
+        if (result.error) {
+          toast({ variant: "destructive", title: "Update failed", description: result.error })
         }
+        return
+      }
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+      toast({ title: "Project updated!" })
+    },
+    onError: (err: any, _, context) => {
+      queryClient.setQueryData(["projects"], context?.previousProjects)
+      toast({ variant: "destructive", title: "Update failed", description: err.message })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteProjectAction(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["projects"] })
+      const previousProjects = queryClient.getQueryData(["projects"])
+      queryClient.setQueryData(["projects"], (old: any) => old?.filter((p: any) => p.id !== id))
+      return { previousProjects }
+    },
+    onSuccess: (result) => {
+      if (result.error) throw new Error(result.error)
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+      toast({ title: "Project deleted" })
+    },
+    onError: (err: any, _, context) => {
+      queryClient.setQueryData(["projects"], context?.previousProjects)
+      toast({ variant: "destructive", title: "Deletion failed", description: err.message })
+    },
+  })
+
+  // togglePinProjectAction(id, currentPinState) receives the CURRENT state
+  // and flips it internally via: await togglePinProject(id, userId, !currentPinState)
+  const togglePinMutation = useMutation({
+    mutationFn: ({ id, currentPinState }: { id: string; currentPinState: boolean }) =>
+      togglePinProjectAction(id, currentPinState),
+    onMutate: async ({ id, currentPinState }) => {
+      await queryClient.cancelQueries({ queryKey: ["projects"] })
+      const previousProjects = queryClient.getQueryData(["projects"])
+
+      // Optimistic: flip to what the server will set
+      queryClient.setQueryData(["projects"], (old: any) =>
+        old?.map((p: any) => (p.id === id ? { ...p, isPinned: !currentPinState } : p))
+      )
+      return { previousProjects }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+    },
+    onError: (err: any, _, context) => {
+      queryClient.setQueryData(["projects"], context?.previousProjects)
+      toast({ variant: "destructive", title: "Action failed", description: err.message })
+    },
+  })
+
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "active" | "completed" }) =>
+      setProjectStatusAction(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+      toast({ title: "Project Status updated!" })
+    },
+  })
+
+  const toggleArchiveMutation = useMutation({
+    mutationFn: ({ id, isArchived }: { id: string; isArchived: boolean }) =>
+      archiveProjectAction(id, isArchived),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
+      toast({
+        title: variables.isArchived ? "Project archived" : "Project unarchived",
       })
-    })
-  }
+    },
+    onError: (err: any) => {
+      toast({ variant: "destructive", title: "Action failed", description: err.message })
+    },
+  })
 
   return {
-    createProject,
-    isCreating,
-    deleteProject,
-    isDeleting,
-    updateProject,
-    isUpdating,
+    projects,
+    isLoading,
+    isError,
+    error,
+
+    // ✅ Expose cache lookup for other components
+    getProjectFromCache,
+
+    createProject: createMutation.mutateAsync,
+    isCreating: createMutation.isPending,
+
+    updateProject: updateMutation.mutateAsync,
+    isUpdating: updateMutation.isPending,
+
+    deleteProject: deleteMutation.mutateAsync,
+    isDeleting: deleteMutation.isPending,
+
+    togglePin: togglePinMutation.mutateAsync,
+    toggleStatus: toggleStatusMutation.mutateAsync,
+    toggleArchive: toggleArchiveMutation.mutateAsync,
   }
 }

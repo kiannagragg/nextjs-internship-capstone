@@ -1,34 +1,3 @@
-// TODO: Task 4.1 - Implement project CRUD operations
-// TODO: Task 4.4 - Build task creation and editing functionality
-
-/*
-TODO: Implementation Notes for Interns:
-
-Modal for creating new projects with form validation.
-
-Features to implement:
-- Form with project name, description, due date
-- Zod validation
-- Error handling
-- Loading states
-- Success feedback
-- Team member assignment
-- Project template selection
-
-Form fields:
-- Name (required)
-- Description (optional)
-- Due date (optional)
-- Team members (optional)
-- Project template (optional)
-- Privacy settings
-
-Integration:
-- Use project validation schema from lib/validations.ts
-- Call project creation API
-- Update project list optimistically
-- Handle errors gracefully
-*/
 "use client"
 
 import { useState } from "react"
@@ -64,7 +33,7 @@ const PROJECT_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "
 export function CreateProjectModal() {
   const router = useRouter()
   const { toast } = useToast()
-  const { user } = useUser() // <-- Grab the current user
+  const { user } = useUser()
 
   const { isCreateProjectModalOpen, closeCreateProjectModal } = useUIStore()
   const { createProject, isCreating } = useProjects()
@@ -110,28 +79,27 @@ export function CreateProjectModal() {
     try {
       const result = (await createProject(formData)) as any
 
-      toast({
-        title: "Project created!",
-        description: "Your new project has been successfully created.",
-      })
+      // 1. Check if the server action returned validation errors
+      if (result?.fieldErrors) {
+        setFieldErrors(result.fieldErrors)
+        return // Stop here so the modal stays open!
+      }
 
+      // 2. Check for a general server error
+      if (result?.error) {
+        setError(result.error)
+        return // Stop here!
+      }
+
+      // 3. Success! Close modal and navigate
       handleClose()
 
       if (result?.projectId) {
         router.push(`/projects/${result.projectId}`)
       }
     } catch (err: any) {
-      if (err.fieldErrors) {
-        setFieldErrors(err.fieldErrors)
-      } else if (err.error) {
-        setError(err.error)
-      }
-
-      toast({
-        variant: "destructive",
-        title: "Uh oh! Something went wrong.",
-        description: err.error || "Failed to create the project. Please try again.",
-      })
+      // Fallback for unexpected network/runtime crashes
+      setError(err.message || "An unexpected error occurred.")
     }
   }
 
@@ -173,7 +141,7 @@ export function CreateProjectModal() {
               }
             />
             {fieldErrors.title && (
-              <p className="text-xs text-destructive">{fieldErrors.title[0]}</p>
+              <p className="mt-1 text-xs text-destructive">{fieldErrors.title[0]}</p>
             )}
           </div>
 
@@ -185,8 +153,11 @@ export function CreateProjectModal() {
               rows={3}
               disabled={isCreating}
               placeholder="Briefly describe the project goals..."
-              className="resize-none"
+              className={`resize-none ${fieldErrors.description ? "border-destructive focus-visible:ring-destructive" : ""}`}
             />
+            {fieldErrors.description && (
+              <p className="mt-1 text-xs text-destructive">{fieldErrors.description[0]}</p>
+            )}
           </div>
 
           {/* Row 3: Project Color */}
@@ -257,8 +228,11 @@ export function CreateProjectModal() {
                 type="date"
                 name="startDate"
                 disabled={isCreating}
-                className="text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert"
+                className={`${fieldErrors.startDate ? "border-destructive focus-visible:ring-destructive" : ""} text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert`}
               />
+              {fieldErrors.startDate && (
+                <p className="mt-1 text-xs text-destructive">{fieldErrors.startDate[0]}</p>
+              )}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Due Date</label>
@@ -269,7 +243,7 @@ export function CreateProjectModal() {
                 className={`${fieldErrors.dueDate ? "border-destructive focus-visible:ring-destructive" : ""} text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert`}
               />
               {fieldErrors.dueDate && (
-                <p className="text-xs text-destructive">{fieldErrors.dueDate[0]}</p>
+                <p className="mt-1 text-xs text-destructive">{fieldErrors.dueDate[0]}</p>
               )}
             </div>
           </div>

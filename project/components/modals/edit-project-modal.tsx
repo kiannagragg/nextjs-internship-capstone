@@ -71,45 +71,28 @@ export function EditProjectModal() {
     const formData = new FormData(e.currentTarget)
 
     try {
-      await updateProject(editingProject.id, formData)
+      const result = (await updateProject({
+        id: editingProject.id,
+        data: formData,
+      })) as any
 
-      toast({
-        title: "Project updated!",
-        description: "Your changes have been successfully saved.",
-      })
+      // 1. Catch Server Action validation errors
+      if (result?.fieldErrors) {
+        setFieldErrors(result.fieldErrors)
+        return // Keep modal open
+      }
 
+      // 2. Catch general server errors (e.g., Unauthorized)
+      if (result?.error) {
+        setError(result.error)
+        return // Keep modal open
+      }
+
+      // 3. Success!
       handleClose()
     } catch (err: any) {
-      // Removed the console.error to satisfy the ESLint no-console rule
-
-      if (err?.fieldErrors) {
-        setFieldErrors(err.fieldErrors)
-        const keys = Object.keys(err.fieldErrors)
-
-        if (keys.length > 0) {
-          const firstField = keys[0]
-          if (firstField) {
-            toast({
-              variant: "destructive",
-              title: "Invalid input",
-              description: err.fieldErrors[firstField][0],
-            })
-          }
-        }
-      } else if (err?.error) {
-        setError(err.error)
-        toast({
-          variant: "destructive",
-          title: "Update failed",
-          description: err.error,
-        })
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Something went wrong",
-          description: "Please try again later.",
-        })
-      }
+      // Fallback for network crashes
+      setError(err.message || "An unexpected error occurred.")
     }
   }
 
@@ -121,7 +104,6 @@ export function EditProjectModal() {
             Edit Project Details
           </DialogTitle>
           <DialogDescription>
-            {/* Fixed the unescaped apostrophe here! */}
             Update your project&apos;s details, status, and preferences.
           </DialogDescription>
         </DialogHeader>
@@ -148,7 +130,7 @@ export function EditProjectModal() {
               }
             />
             {fieldErrors.title && (
-              <p className="text-xs text-destructive">{fieldErrors.title[0]}</p>
+              <p className="mt-1 text-xs text-destructive">{fieldErrors.title[0]}</p>
             )}
           </div>
 
@@ -161,8 +143,11 @@ export function EditProjectModal() {
               disabled={isUpdating}
               defaultValue={editingProject.description || ""}
               placeholder="Briefly describe the project goals..."
-              className="resize-none"
+              className={`resize-none ${fieldErrors.description ? "border-destructive focus-visible:ring-destructive" : ""}`}
             />
+            {fieldErrors.description && (
+              <p className="mt-1 text-xs text-destructive">{fieldErrors.description[0]}</p>
+            )}
           </div>
 
           {/* Row 3: Project Color */}
@@ -252,8 +237,11 @@ export function EditProjectModal() {
                 name="startDate"
                 disabled={isUpdating}
                 defaultValue={formatDateForInput(editingProject.startDate)}
-                className="text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert"
+                className={`${fieldErrors.startDate ? "border-destructive focus-visible:ring-destructive" : ""} text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert`}
               />
+              {fieldErrors.startDate && (
+                <p className="mt-1 text-xs text-destructive">{fieldErrors.startDate[0]}</p>
+              )}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-foreground">Due Date</label>
@@ -265,7 +253,7 @@ export function EditProjectModal() {
                 className={`${fieldErrors.dueDate ? "border-destructive focus-visible:ring-destructive" : ""} text-foreground placeholder:text-foreground/50 [&::-webkit-calendar-picker-indicator]:brightness-100 [&::-webkit-calendar-picker-indicator]:invert`}
               />
               {fieldErrors.dueDate && (
-                <p className="text-xs text-destructive">{fieldErrors.dueDate[0]}</p>
+                <p className="mt-1 text-xs text-destructive">{fieldErrors.dueDate[0]}</p>
               )}
             </div>
           </div>

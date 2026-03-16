@@ -62,16 +62,84 @@ export function useTasks(projectId: string) {
 */
 
 // Placeholder to prevent import errors
-export function useTasks(projectId: string) {
-  console.log(`TODO: Implement useTasks hook for project ${projectId}`)
-  return {
-    tasks: [],
-    isLoading: false,
-    error: null,
-    createTask: (data: any) => console.log("TODO: Create task", data),
-    updateTask: (id: string, data: any) => console.log(`TODO: Update task ${id}`, data),
-    deleteTask: (id: string) => console.log(`TODO: Delete task ${id}`),
-    moveTask: (taskId: string, newListId: string, position: number) =>
-      console.log(`TODO: Move task ${taskId} to list ${newListId} at position ${position}`),
+import { useTransition } from "react"
+import { useBoardStore } from "@/stores/board-store"
+import { createTaskAction, deleteTaskAction } from "@/lib/actions/tasks"
+import { useToast } from "@/hooks/use-toast"
+import type { TaskWithAssignees } from "@/types"
+
+export function useTasks() {
+  const [isPending, startTransition] = useTransition()
+  const { toast } = useToast()
+
+  // Bring in your Zustand store actions
+  const { addTaskOptimistic, removeTaskOptimistic, lists } = useBoardStore()
+
+  const createTask = (title: string, listId: string, projectId: string, currentUserId: string) => {
+    const tempTaskId = `temp-${crypto.randomUUID()}`
+
+    // 1. Optimistic Update Payload
+    const optimisticTask: TaskWithAssignees = {
+      id: tempTaskId,
+      title,
+      description: null,
+      priority: "medium",
+      isCompleted: false,
+      position: lists.find((l) => l.id === listId)?.tasks.length || 0,
+      startDate: null,
+      dueDate: null,
+      createdById: currentUserId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      completedAt: null,
+      listId,
+      projectId,
+      assignees: [],
+      labels: [],
+    }
+
+    // Instantly update UI
+    addTaskOptimistic(listId, optimisticTask)
+
+    // 2. Server Action
+    startTransition(async () => {
+      const result = await createTaskAction({ title, listId, projectId })
+
+      if (result?.error) {
+        // Rollback on error
+        removeTaskOptimistic(tempTaskId)
+        toast({
+          variant: "destructive",
+          title: "Failed to create task",
+          description: result.error,
+        })
+      }
+    })
   }
+
+  const deleteTask = (taskId: string, projectId: string) => {
+    // 1. Optimistic Update
+    removeTaskOptimistic(taskId)
+
+    // 2. Server Action
+    startTransition(async () => {
+      const result = await deleteTaskAction(taskId, projectId)
+
+      if (result?.error) {
+        // If it fails, ideally we'd re-sync the board data to get the task back
+        toast({
+          variant: "destructive",
+          title: "Failed to delete task",
+          description: result.error,
+        })
+      } else {
+        toast({
+          title: "Task deleted",
+          description: "Task has been removed successfully.",
+        })
+      }
+    })
+  }
+
+  return { createTask, deleteTask, isPending }
 }
