@@ -2,6 +2,8 @@
 
 import { Calendar, MoreHorizontal, Edit, Copy, Trash } from "lucide-react"
 import { TaskWithAssignees } from "@/types"
+import { useSortable } from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -19,11 +21,23 @@ import {
 interface TaskCardProps {
   task: TaskWithAssignees
   onClick?: (task: TaskWithAssignees) => void
-  onDelete?: (taskId: string) => void // 👈 Added this prop
+  onDelete?: (taskId: string) => void
+  isOverlay?: boolean
 }
 
-export function TaskCard({ task, onClick, onDelete }: TaskCardProps) {
+export function TaskCard({ task, onClick, onDelete, isOverlay }: TaskCardProps) {
   const { toast } = useToast()
+
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data: { type: "task", task },
+  })
+
+  const style = {
+    transition,
+    transform: CSS.Transform.toString(transform),
+    opacity: isDragging ? 0.3 : 1,
+  }
 
   const getPriorityColor = (priority: string | null) => {
     switch (priority) {
@@ -56,11 +70,23 @@ export function TaskCard({ task, onClick, onDelete }: TaskCardProps) {
     })
   }
 
+  if (isOverlay) {
+    return (
+      <div className="flex rotate-2 cursor-grabbing flex-col gap-3 rounded-md border bg-card p-3 opacity-90 shadow-xl ring-2 ring-primary">
+        <h4 className="line-clamp-2 text-sm font-medium leading-snug">{task.title}</h4>
+      </div>
+    )
+  }
+
   return (
     <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
       onClick={() => onClick?.(task)}
       className={`group relative mb-2 flex cursor-pointer flex-col gap-3 rounded-md border bg-card p-3 shadow-sm transition-all hover:ring-1 hover:ring-primary ${
-        task.isCompleted ? "opacity-60" : "opacity-100" // 👈 Visual fade for completed tasks
+        task.isCompleted ? "opacity-60" : "opacity-100"
       }`}
     >
       {/* Top Row: Priority Badge & Actions */}
@@ -83,6 +109,7 @@ export function TaskCard({ task, onClick, onDelete }: TaskCardProps) {
               size="icon"
               className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
               onClick={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
             >
               <MoreHorizontal size={14} className="text-muted-foreground" />
             </Button>
@@ -106,7 +133,7 @@ export function TaskCard({ task, onClick, onDelete }: TaskCardProps) {
               className="text-destructive focus:bg-destructive focus:text-destructive-foreground"
               onClick={(e) => {
                 e.stopPropagation()
-                onDelete?.(task.id) // 👈 Wire up delete
+                onDelete?.(task.id)
               }}
             >
               <Trash className="mr-2 h-4 w-4" />

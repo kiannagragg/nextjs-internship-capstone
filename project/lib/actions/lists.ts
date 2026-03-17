@@ -13,6 +13,7 @@ import {
   updateList,
   deleteList,
   reorderLists,
+  moveList,
 } from "@/lib/db/queries/lists"
 import {
   createListSchema,
@@ -167,6 +168,24 @@ export async function deleteListAction(
     return { success: true }
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Failed to delete list" }
+  }
+}
+
+export async function moveListAction(listId: string, projectId: string, position: number) {
+  try {
+    const { dbUserId } = await requireAuth()
+
+    const role = await verifyProjectAccess(projectId, dbUserId)
+    if (role === "viewer") {
+      throw new Error("Unauthorized: Viewers cannot reorder lists")
+    }
+
+    await moveList(listId, position, projectId, dbUserId)
+
+    revalidatePath(`/projects/${projectId}`)
+    return { success: true }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Failed to move list" }
   }
 }
 

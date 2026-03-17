@@ -7,6 +7,7 @@ import {
   deleteListAction,
   updateListAction,
   getProjectListsAction,
+  moveListAction,
 } from "@/lib/actions/lists"
 import type { ListWithTasks } from "@/types"
 
@@ -64,6 +65,11 @@ export function useLists(projectId: string, initialData?: ListWithTasks[]) {
       if (result?.error) {
         queryClient.invalidateQueries({ queryKey })
         toast({ variant: "destructive", title: "Update failed", description: result.error })
+      } else {
+        toast({
+          title: "List updated",
+          description: "Your changes have been saved successfully.",
+        })
       }
     },
     onError: (err: any, _, context) => {
@@ -94,6 +100,30 @@ export function useLists(projectId: string, initialData?: ListWithTasks[]) {
     onSettled: () => queryClient.invalidateQueries({ queryKey }),
   })
 
+  const moveMutation = useMutation({
+    mutationFn: ({ listId, position }: { listId: string; position: number }) =>
+      moveListAction(listId, projectId, position),
+    onMutate: async ({ listId, position }) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
+
+      queryClient.setQueryData<ListWithTasks[]>(queryKey, (old) => {
+        if (!old) return []
+
+        // Optimistically update the list's position and re-sort the array
+        const updatedLists = old.map((list) => (list.id === listId ? { ...list, position } : list))
+        return updatedLists.sort((a, b) => a.position - b.position)
+      })
+
+      return { previousLists }
+    },
+    onError: (err: any, _, context) => {
+      queryClient.setQueryData(queryKey, context?.previousLists)
+      toast({ variant: "destructive", title: "Failed to move list", description: err.message })
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  })
+
   return {
     lists,
     isLoadingLists,
@@ -104,5 +134,7 @@ export function useLists(projectId: string, initialData?: ListWithTasks[]) {
     isUpdatingList: updateMutation.isPending,
     deleteList: deleteMutation.mutateAsync,
     isDeletingList: deleteMutation.isPending,
+    moveList: moveMutation.mutateAsync,
+    isMovingList: moveMutation.isPending,
   }
 }

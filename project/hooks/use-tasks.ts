@@ -71,6 +71,7 @@ import {
   updateTaskAction,
   deleteTaskAction,
   moveTaskAction,
+  rebalanceTasksAction,
 } from "@/lib/actions/tasks"
 import type { ListWithTasks, TaskWithAssignees } from "@/types"
 
@@ -147,12 +148,12 @@ export function useTasks(projectId: string) {
     },
     onSuccess: (result) => {
       if (result?.error) throw new Error(result.error)
+      queryClient.invalidateQueries({ queryKey })
     },
     onError: (err: any, _, context) => {
       queryClient.setQueryData(queryKey, context?.previousLists)
       toast({ variant: "destructive", title: "Failed to update task", description: err.message })
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey }),
   })
 
   const deleteMutation = useMutation({
@@ -174,18 +175,28 @@ export function useTasks(projectId: string) {
     onSuccess: (result) => {
       if (result?.error) throw new Error(result.error)
       toast({ title: "Task deleted" })
+      queryClient.invalidateQueries({ queryKey })
     },
     onError: (err: any, _, context) => {
       queryClient.setQueryData(queryKey, context?.previousLists)
       toast({ variant: "destructive", title: "Failed to delete task", description: err.message })
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey }),
   })
 
   const moveMutation = useMutation({
-    mutationFn: (data: { taskId: string; targetListId: string; position: number }) =>
-      moveTaskAction(data, projectId),
-    onMutate: async ({ taskId, targetListId, position }) => {
+    // 1. Check for the server error HERE so React Query catches it
+    mutationFn: async (data: { taskId: string; listId: string; position: number }) => {
+      // Note: If your Server Action schema expects projectId inside the object,
+      // change `data` to `{ ...data, projectId }`
+      const result = await moveTaskAction(data, projectId)
+
+      if (result?.error) {
+        throw new Error(result.error) // This now correctly triggers onError!
+      }
+
+      return result
+    },
+    onMutate: async ({ taskId, listId, position }) => {
       await queryClient.cancelQueries({ queryKey })
       const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
 
@@ -195,20 +206,17 @@ export function useTasks(projectId: string) {
         let taskToMove: TaskWithAssignees | undefined
         old.forEach((list) => {
           const found = list.tasks.find((t) => t.id === taskId)
-          if (found) taskToMove = { ...found, listId: targetListId, position }
+          if (found) taskToMove = { ...found, listId: listId, position }
         })
 
         if (!taskToMove) return old
 
         // Remove from old list, add to new list, and sort
         return old.map((list) => {
-          // Remove from source list
           let newTasks = list.tasks.filter((t) => t.id !== taskId)
 
-          // Add to target list
-          if (list.id === targetListId) {
+          if (list.id === listId) {
             newTasks.push(taskToMove!)
-            // Re-sort array based on fractional position
             newTasks.sort((a, b) => a.position - b.position)
           }
 
@@ -218,14 +226,31 @@ export function useTasks(projectId: string) {
 
       return { previousLists }
     },
-    onSuccess: (result) => {
-      if (result?.error) throw new Error(result.error)
+    onSuccess: () => {
+      // 2. Clean success block - only runs if no error was thrown above
+      queryClient.invalidateQueries({ queryKey })
     },
     onError: (err: any, _, context) => {
+      // 3. This will finally run and show us the ghost!
       queryClient.setQueryData(queryKey, context?.previousLists)
       toast({ variant: "destructive", title: "Failed to move task", description: err.message })
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey }),
+  })
+
+  const rebalanceMutation = useMutation({
+    mutationFn: (listId: string) => rebalanceTasksAction(listId, projectId),
+    onSuccess: (result) => {
+      if (result?.error) throw new Error(result.error)
+      // Force the UI to refetch the freshly spaced tasks
+      queryClient.invalidateQueries({ queryKey })
+    },
+    onError: (err: any) => {
+      toast({
+        variant: "destructive",
+        title: "Background sync failed",
+        description: "Failed to rebalance task positions, but your tasks are still safe.",
+      })
+    },
   })
 
   return {
@@ -237,5 +262,7 @@ export function useTasks(projectId: string) {
     isDeletingTask: deleteMutation.isPending,
     moveTask: moveMutation.mutateAsync,
     isMovingTask: moveMutation.isPending,
+    rebalanceTasks: rebalanceMutation.mutateAsync,
+    isRebalancing: rebalanceMutation.isPending,
   }
 }

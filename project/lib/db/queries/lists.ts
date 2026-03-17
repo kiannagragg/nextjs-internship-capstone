@@ -127,6 +127,31 @@ export async function deleteList(listId: string, userId: string, migrationListId
 }
 
 /**
+ * Move a list to a new fractional position.
+ */
+export async function moveList(
+  listId: string,
+  position: number,
+  projectId: string,
+  userId: string
+) {
+  const [updated] = await db.update(lists).set({ position }).where(eq(lists.id, listId)).returning()
+
+  if (updated) {
+    await db.insert(activityLogs).values({
+      projectId,
+      userId,
+      action: "moved",
+      entityType: "list",
+      entityId: listId,
+      metadata: { title: updated.title, newPosition: position },
+    })
+  }
+
+  return updated ?? null
+}
+
+/**
  * Reorder lists by updating their positions.
  * Accepts an array of { id, position } pairs from the drag-and-drop UI.
  */

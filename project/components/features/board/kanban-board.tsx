@@ -1,23 +1,28 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Plus, MoreHorizontal, Loader2, Trash2, Edit2, Lock } from "lucide-react"
+import { useState, useEffect, useMemo } from "react"
+import { Plus, Loader2 } from "lucide-react"
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragStartEvent,
+  DragOverEvent,
+  DragEndEvent,
+} from "@dnd-kit/core"
+import { SortableContext, horizontalListSortingStrategy, arrayMove } from "@dnd-kit/sortable"
 
-import type { ListWithTasks } from "@/types"
 import { useBoardStore } from "@/stores/board-store"
 import { useTasks } from "@/hooks/use-tasks"
 import { useLists } from "@/hooks/use-lists"
+import { calculateFractionalPosition } from "@/lib/utils"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -36,31 +41,49 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+import { ListColumn } from "./list-column"
 import { TaskCard } from "@/components/features/tasks/task-card"
 import { TaskSheet } from "../tasks/task-sheet"
+
+const PRESET_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#64748B"]
+
 interface KanbanBoardProps {
   project: any
   initialLists: any[]
   currentUserId: string
 }
 
-const PRESET_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#64748B"]
-
 export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoardProps) {
   const projectId = project?.id
 
-  const { createTask, isCreatingTask: isTaskPending, deleteTask, updateTask } = useTasks(projectId)
+  // --- HOOKS & STORE ---
+  const {
+    createTask,
+    isCreatingTask: isTaskPending,
+    deleteTask,
+    updateTask,
+    moveTask,
+    rebalanceTasks,
+  } = useTasks(projectId)
   const {
     lists: queryLists,
     createList,
     isCreatingList,
     updateList,
-    isUpdatingList,
     deleteList,
     isDeletingList,
+    moveList,
   } = useLists(projectId, initialLists)
 
-  const { lists: storeLists, setBoardData } = useBoardStore()
+  const {
+    lists: storeLists,
+    setBoardData,
+    activeDragType,
+    activeDragTask,
+    activeDragList,
+    setActiveDragItem,
+    clearActiveDragItem,
+  } = useBoardStore()
 
   useEffect(() => {
     if (projectId && queryLists) {
@@ -68,55 +91,318 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     }
   }, [projectId, queryLists, setBoardData])
 
+  // --- PERMISSIONS & RULES ---
   const userMembership = project?.members?.find((m: any) => m.userId === currentUserId)
   const userRole = userMembership?.role || "viewer"
   const canModifyBoard = userRole !== "viewer"
 
-  // Check how many 'done' lists exist to enforce rules
   const doneListsCount = storeLists.filter((l) => l.type === "done").length
   const hasDoneList = doneListsCount > 0
 
-  // Local UI State
+  // --- LOCAL UI STATE ---
   const [isAddingList, setIsAddingList] = useState(false)
   const [newListTitle, setNewListTitle] = useState("")
   const [newListColor, setNewListColor] = useState(PRESET_COLORS[0])
   const [newListType, setNewListType] = useState<string>("custom")
 
-  const [editingListId, setEditingListId] = useState<string | null>(null)
-  const [editListTitle, setEditListTitle] = useState("")
-  const [editListColor, setEditListColor] = useState("")
-  const [editListType, setEditListType] = useState<string>("custom")
-
-  // Updated state to track tasks count and migration target
   const [listToDelete, setListToDelete] = useState<{
     id: string
     title: string
     taskCount: number
   } | null>(null)
   const [migrationListId, setMigrationListId] = useState<string>("")
-
-  const [newTaskTitle, setNewTaskTitle] = useState("")
-  const [addingTaskToListId, setAddingTaskToListId] = useState<string | null>(null)
-
-  const [newTaskPriority, setNewTaskPriority] = useState<string | null>(null)
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState<any | null>(null)
 
-  const taskInputRef = useRef<HTMLTextAreaElement>(null)
+  // --- DND-KIT SETUP ---
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor)
+  )
 
-  useEffect(() => {
-    if (addingTaskToListId && taskInputRef.current) {
-      taskInputRef.current.focus()
+  const listIds = useMemo(() => storeLists.map((l) => `list-${l.id}`), [storeLists])
+
+  // --- DND HANDLERS ---
+  const onDragStart = (event: DragStartEvent) => {
+    const { active } = event
+    const type = active.data.current?.type?.toLowerCase()
+
+    if (type === "list") {
+      const list = active.data.current?.list
+      if (list) {
+        setActiveDragItem({ id: active.id as string, type, list })
+      }
     }
-  }, [addingTaskToListId])
+    if (type === "task") {
+      const task = active.data.current?.task
+      if (task) {
+        setActiveDragItem({ id: active.id as string, type, task })
+      }
+    }
+  }
 
-  if (!project) return null
+  const onDragOver = (event: DragOverEvent) => {
+    const { active, over } = event
+    if (!over) return
 
-  // --- LIST ACTIONS ---
+    const activeId = active.id as string
+    const overId = over.id as string
+    if (activeId === overId) return
+
+    const isActiveTask = active.data.current?.type?.toLowerCase() === "task"
+    const isOverTask = over.data.current?.type?.toLowerCase() === "task"
+    const isOverList = over.data.current?.type?.toLowerCase() === "list"
+
+    if (!isActiveTask) return
+
+    // 1. Moving a Task over another Task
+    if (isActiveTask && isOverTask) {
+      const activeListId = active.data.current?.task.listId
+      const overListId = over.data.current?.task.listId
+
+      if (activeListId !== overListId) {
+        const activeListIndex = storeLists.findIndex((l) => l.id === activeListId)
+        const overListIndex = storeLists.findIndex((l) => l.id === overListId)
+
+        if (activeListIndex !== -1 && overListIndex !== -1) {
+          const newLists = [...storeLists]
+          const activeList = { ...newLists[activeListIndex] } as any
+          const overList = { ...newLists[overListIndex] } as any
+
+          const activeTasks = activeList.tasks || []
+          const activeTask = activeTasks.find((t: any) => t.id === activeId)
+
+          if (activeTask) {
+            activeList.tasks = activeTasks.filter((t: any) => t.id !== activeId)
+            overList.tasks = [...(overList.tasks || []), { ...activeTask, listId: overListId }]
+
+            newLists[activeListIndex] = activeList
+            newLists[overListIndex] = overList
+
+            setBoardData(projectId, newLists)
+          }
+        }
+      }
+    }
+
+    // 2. Moving a Task into an empty List
+    if (isActiveTask && isOverList) {
+      const activeListId = active.data.current?.task.listId
+      const overListId = overId.replace("list-", "")
+
+      if (activeListId !== overListId) {
+        const activeListIndex = storeLists.findIndex((l) => l.id === activeListId)
+        const overListIndex = storeLists.findIndex((l) => l.id === overListId)
+
+        if (activeListIndex !== -1 && overListIndex !== -1) {
+          const newLists = [...storeLists]
+          const activeList = { ...newLists[activeListIndex] } as any
+          const overList = { ...newLists[overListIndex] } as any
+
+          const activeTasks = activeList.tasks || []
+          const activeTask = activeTasks.find((t: any) => t.id === activeId)
+
+          if (activeTask) {
+            activeList.tasks = activeTasks.filter((t: any) => t.id !== activeId)
+            overList.tasks = [...(overList.tasks || []), { ...activeTask, listId: overListId }]
+
+            newLists[activeListIndex] = activeList
+            newLists[overListIndex] = overList
+
+            setBoardData(projectId, newLists)
+          }
+        }
+      }
+    }
+  }
+
+  const onDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (!over) {
+      clearActiveDragItem()
+      return
+    }
+
+    const activeId = active.id as string
+    const overId = over.id as string
+
+    const isActiveList = active.data.current?.type?.toLowerCase() === "list"
+    const isActiveTask = active.data.current?.type?.toLowerCase() === "task"
+
+    // =====================================================
+    // LIST REORDER (UNCHANGED, CLEANED)
+    // =====================================================
+    if (isActiveList) {
+      const activeListId = activeId.replace("list-", "")
+
+      const oldIndex = storeLists.findIndex((l) => l.id === activeListId)
+      const newIndex = storeLists.findIndex((l) => `list-${l.id}` === overId)
+
+      if (oldIndex === -1 || newIndex === -1) {
+        clearActiveDragItem()
+        return
+      }
+
+      const reordered = [...storeLists]
+      const [moved] = reordered.splice(oldIndex, 1)
+      if (!moved) {
+        clearActiveDragItem()
+        return
+      }
+      reordered.splice(newIndex, 0, moved)
+
+      const prev = reordered[newIndex - 1]?.position
+      const next = reordered[newIndex + 1]?.position
+
+      const newPosition =
+        prev !== undefined && next !== undefined
+          ? (prev + next) / 2
+          : prev !== undefined
+            ? prev + 65536
+            : next !== undefined
+              ? next / 2
+              : 65536
+
+      moveList({
+        listId: activeListId,
+        position: Math.round(newPosition),
+      })
+
+      clearActiveDragItem()
+      return
+    }
+
+    // =====================================================
+    // TASK MOVE (FULLY REWRITTEN)
+    // =====================================================
+    if (isActiveTask) {
+      const activeTask = active.data.current?.task
+      if (!activeTask) {
+        clearActiveDragItem()
+        return
+      }
+
+      const sourceListId = activeTask.listId
+
+      const isOverTask = over.data.current?.type?.toLowerCase() === "task"
+      const isOverList = over.data.current?.type?.toLowerCase() === "list"
+
+      let targetListId = ""
+
+      if (isOverTask) {
+        targetListId = over.data.current?.task?.listId
+      } else if (isOverList) {
+        targetListId = overId.replace("list-", "")
+      }
+
+      if (!targetListId) {
+        clearActiveDragItem()
+        return
+      }
+
+      const sourceList = storeLists.find((l) => l.id === sourceListId)
+      const targetList = storeLists.find((l) => l.id === targetListId)
+
+      if (!sourceList || !targetList) {
+        clearActiveDragItem()
+        return
+      }
+
+      // =====================================================
+      // ALWAYS WORK WITH SORTED TASKS (CRITICAL)
+      // =====================================================
+      const sortedTargetTasks = [...(targetList.tasks || [])].sort(
+        (a, b) => a.position - b.position
+      )
+
+      // Remove if already exists (important for same-list moves)
+      const filteredTasks = sortedTargetTasks.filter((t) => t.id !== activeId)
+
+      let prevPosition: number | undefined
+      let nextPosition: number | undefined
+
+      // =====================================================
+      // CASE 1: DROPPED ON A TASK
+      // =====================================================
+      if (isOverTask) {
+        const overTask = over.data.current?.task
+        const overIndex = filteredTasks.findIndex((t) => t.id === overTask.id)
+
+        prevPosition = filteredTasks[overIndex - 1]?.position
+        nextPosition = filteredTasks[overIndex]?.position
+      }
+
+      // =====================================================
+      // CASE 2: DROPPED ON LIST (BOTTOM INSERT - JIRA STYLE)
+      // =====================================================
+      if (isOverList) {
+        prevPosition = filteredTasks[filteredTasks.length - 1]?.position
+        nextPosition = undefined
+      }
+
+      // =====================================================
+      // POSITION CALCULATION (SAFE)
+      // =====================================================
+      let newPosition: number
+
+      if (prevPosition !== undefined && nextPosition !== undefined) {
+        newPosition = (prevPosition + nextPosition) / 2
+      } else if (prevPosition !== undefined) {
+        newPosition = prevPosition + 65536
+      } else if (nextPosition !== undefined) {
+        newPosition = nextPosition / 2
+      } else {
+        newPosition = 65536
+      }
+
+      newPosition = Math.round(newPosition)
+
+      // =====================================================
+      // OPTIMISTIC UI UPDATE (CLEAN & SAFE)
+      // =====================================================
+      const updatedTargetTasks = [
+        ...filteredTasks,
+        {
+          ...activeTask,
+          listId: targetListId,
+          position: newPosition,
+        },
+      ].sort((a, b) => a.position - b.position)
+
+      const updatedLists = storeLists.map((list) => {
+        if (list.id === targetListId) {
+          return { ...list, tasks: updatedTargetTasks }
+        }
+
+        if (list.id === sourceListId && sourceListId !== targetListId) {
+          return {
+            ...list,
+            tasks: list.tasks?.filter((t) => t.id !== activeId) || [],
+          }
+        }
+
+        return list
+      })
+
+      setBoardData(projectId, updatedLists)
+
+      // =====================================================
+      // BACKEND UPDATE
+      // =====================================================
+      moveTask({
+        taskId: activeId,
+        listId: targetListId,
+        position: newPosition,
+      })
+
+      clearActiveDragItem()
+    }
+  }
+  // --- ACTIONS ---
   const handleCreateList = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newListTitle.trim() || !projectId) return
-
     const title = newListTitle.trim()
     const color = newListColor || (PRESET_COLORS[0] as string)
     const type = newListType
@@ -129,24 +415,21 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     await createList({ title, projectId, color, type })
   }
 
-  const handleEditList = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editListTitle.trim() || !editingListId) return
+  const handleEditList = async (id: string, data: any) => {
+    await updateList({ id, projectId, data })
+  }
 
-    const id = editingListId
-    const title = editListTitle.trim()
-    const color = editListColor
-    const type = editListType
-
-    setEditingListId(null)
-    await updateList({ id, projectId, data: { title, color, type } })
+  const handleDeleteListClick = (list: any) => {
+    setListToDelete({
+      id: list.id,
+      title: list.title,
+      taskCount: list.tasks?.length || 0,
+    })
   }
 
   const confirmDeleteList = async () => {
     if (!listToDelete) return
     const { id } = listToDelete
-
-    // Only pass migrationListId if tasks exist and need moving
     const finalMigrationId = listToDelete.taskCount > 0 ? migrationListId : undefined
 
     setListToDelete(null)
@@ -155,73 +438,66 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     await deleteList({ id, projectId, migrationListId: finalMigrationId })
   }
 
-  const startEditing = (list: any) => {
-    setEditingListId(list.id)
-    setEditListTitle(list.title)
-    setEditListColor(list.color || (PRESET_COLORS[0] as string))
-    setEditListType(list.type || "custom")
+  const handleCreateTask = (listId: string, title: string, priority: string | null) => {
+    createTask({ title, listId, projectId, priority })
   }
 
-  // --- TASK ACTIONS ---
-  const handleCreateTask = (listId: string) => {
-    if (!newTaskTitle.trim()) return
-    const title = newTaskTitle.trim()
-
-    setNewTaskTitle("")
-    setAddingTaskToListId(null)
-    createTask({ title, listId, projectId, priority: newTaskPriority })
-    setNewTaskPriority(null)
-  }
-
-  const handleTaskKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>, listId: string) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleCreateTask(listId)
-    }
-    if (e.key === "Escape") {
-      setAddingTaskToListId(null)
-      setNewTaskTitle("")
-    }
-  }
+  if (!project) return null
 
   return (
     <>
-      <div className="flex h-full items-start gap-6 overflow-x-auto pb-4 pt-2">
-        {storeLists.map((list: any) => {
-          // Complex logic for deletion rules
-          const isOnlyDoneList = list.type === "done" && doneListsCount <= 1
-          const canDeleteThisList =
-            !isOnlyDoneList &&
-            (userRole === "admin" ||
-              (userRole === "contributor" && list.createdById === currentUserId))
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={onDragStart}
+        onDragOver={onDragOver}
+        onDragEnd={onDragEnd}
+      >
+        <div className="flex h-full items-start gap-6 overflow-x-auto pb-4 pt-2">
+          {/* DRAGGABLE LISTS CONTEXT */}
+          <SortableContext items={listIds} strategy={horizontalListSortingStrategy}>
+            {storeLists.map((list) => (
+              <ListColumn
+                key={list.id}
+                list={list}
+                canModifyBoard={canModifyBoard}
+                hasDoneList={hasDoneList}
+                doneListsCount={doneListsCount}
+                currentUserId={currentUserId}
+                onEditList={handleEditList}
+                onDeleteClick={handleDeleteListClick}
+                onCreateTask={handleCreateTask}
+                isTaskPending={isTaskPending}
+                onTaskClick={setSelectedTask}
+                onTaskDeleteClick={setTaskToDelete}
+              />
+            ))}
+          </SortableContext>
 
-          return (
-            <div
-              key={list.id}
-              className="flex max-h-full w-80 flex-shrink-0 flex-col rounded-xl border bg-secondary/30 shadow-sm"
-            >
-              {editingListId === list.id ? (
+          {/* ADD NEW LIST FORM */}
+          {canModifyBoard && (
+            <div className="w-80 flex-shrink-0">
+              {isAddingList ? (
                 <form
-                  onSubmit={handleEditList}
-                  className="rounded-t-xl border-b bg-background p-3 shadow-sm"
+                  onSubmit={handleCreateList}
+                  className="rounded-xl border bg-background p-3 shadow-sm"
                 >
                   <Input
                     autoFocus
-                    value={editListTitle}
-                    onChange={(e) => setEditListTitle(e.target.value)}
-                    className="mb-2 h-8 text-sm font-medium text-foreground"
+                    placeholder="Enter list title..."
+                    value={newListTitle}
+                    onChange={(e) => setNewListTitle(e.target.value)}
+                    className="mb-3 h-9 text-sm text-foreground"
                   />
-
-                  {/* Select Workflow Type */}
-                  <Select value={editListType} onValueChange={setEditListType}>
-                    <SelectTrigger className="mb-2 h-8 text-xs text-foreground">
-                      <SelectValue placeholder="List Type" />
+                  <Select value={newListType} onValueChange={setNewListType}>
+                    <SelectTrigger className="mb-3 h-9 text-xs text-foreground">
+                      <SelectValue placeholder="List Workflow Type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="todo">To Do</SelectItem>
                       <SelectItem value="in_progress">In Progress</SelectItem>
                       <SelectItem value="review">Review</SelectItem>
-                      <SelectItem value="done" disabled={hasDoneList && list.type !== "done"}>
+                      <SelectItem value="done" disabled={hasDoneList}>
                         Done
                       </SelectItem>
                       <SelectItem value="custom">Custom</SelectItem>
@@ -233,286 +509,82 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
                       <button
                         key={color}
                         type="button"
-                        onClick={() => setEditListColor(color)}
-                        className={`h-5 w-5 flex-shrink-0 rounded-full border-2 transition-all ${
-                          editListColor === color
-                            ? "scale-110 border-foreground shadow-sm"
-                            : "border-transparent hover:scale-105"
-                        }`}
+                        onClick={() => setNewListColor(color)}
+                        className={`h-5 w-5 flex-shrink-0 rounded-full border-2 transition-all ${newListColor === color ? "scale-110 border-foreground shadow-sm" : "border-transparent hover:scale-105"}`}
                         style={{ backgroundColor: color }}
                         aria-label={`Select color ${color}`}
                       />
                     ))}
                   </div>
 
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
                     <Button
                       type="submit"
                       size="sm"
-                      className="h-7 flex-1 text-xs"
-                      disabled={isUpdatingList}
+                      disabled={isCreatingList || !newListTitle.trim()}
                     >
-                      {isUpdatingList ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                      {isCreatingList ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        "Add list"
+                      )}
                     </Button>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-7 flex-1 text-xs text-foreground"
-                      onClick={() => setEditingListId(null)}
+                      className="text-foreground"
+                      onClick={() => {
+                        setIsAddingList(false)
+                        setNewListTitle("")
+                        setNewListColor(PRESET_COLORS[0])
+                        setNewListType("custom")
+                      }}
                     >
                       Cancel
                     </Button>
                   </div>
                 </form>
               ) : (
-                <div className="flex cursor-grab items-center justify-between p-3 active:cursor-grabbing">
-                  <div className="flex items-center gap-2 font-semibold">
-                    {list.color && (
-                      <div
-                        className="h-3 w-3 rounded-full shadow-sm"
-                        style={{ backgroundColor: list.color }}
-                      />
-                    )}
-                    <h3 className="flex items-center gap-2 text-lg text-foreground">
-                      {list.title}
-                      {list.isSystem && (
-                        <span title="System Workflow List" className="flex items-center">
-                          <Lock size={12} className="text-muted-foreground" />
-                        </span>
-                      )}
-                    </h3>
-                    <span className="flex h-5 items-center justify-center rounded-full bg-secondary px-2 text-xs font-medium text-muted-foreground">
-                      {list.tasks?.length || 0}
-                    </span>
-                  </div>
-
-                  {canModifyBoard && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 shrink-0 text-foreground hover:bg-secondary/80"
-                        >
-                          <MoreHorizontal size={16} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem onClick={() => startEditing(list as any)}>
-                          <Edit2 size={14} className="mr-2" /> Edit List
-                        </DropdownMenuItem>
-                        {canDeleteThisList && (
-                          <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-600 focus:bg-red-50 focus:text-red-600"
-                              onClick={() =>
-                                setListToDelete({
-                                  id: list.id,
-                                  title: list.title,
-                                  taskCount: list.tasks?.length || 0,
-                                })
-                              }
-                            >
-                              <Trash2 size={14} className="mr-2" /> Delete List
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                        {/* Show helper text if it's the last Done list */}
-                        {isOnlyDoneList && (
-                          <DropdownMenuItem
-                            disabled
-                            className="text-xs italic text-muted-foreground"
-                          >
-                            Cannot delete final &quot;Done&quot; list
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2 overflow-y-auto px-2 pb-2 pt-3">
-                {/* Render the actual task cards! */}
-                {list.tasks?.map((task: any) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onClick={(t) => {
-                      setSelectedTask(t)
-                    }}
-                    onDelete={(taskId) => {
-                      setTaskToDelete(taskId)
-                    }}
-                  />
-                ))}
-
-                {addingTaskToListId === list.id && (
-                  <div className="mt-2 rounded-lg border bg-background p-2 shadow-sm">
-                    <Textarea
-                      ref={taskInputRef}
-                      placeholder="Enter a title for this card..."
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      onKeyDown={(e) => handleTaskKeyDown(e, list.id)}
-                      className="min-h-[60px] resize-none border-none bg-transparent p-1 text-sm text-foreground shadow-none focus-visible:ring-0"
-                    />
-                    <div className="mt-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => handleCreateTask(list.id)}
-                          disabled={isTaskPending || !newTaskTitle.trim()}
-                        >
-                          {isTaskPending ? (
-                            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                          ) : (
-                            "Add Card"
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs text-foreground"
-                          onClick={() => {
-                            setAddingTaskToListId(null)
-                            setNewTaskTitle("")
-                            setNewTaskPriority(null)
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                      <Select
-                        value={newTaskPriority || "none"}
-                        onValueChange={(val) => setNewTaskPriority(val === "none" ? null : val)}
-                      >
-                        <SelectTrigger className="h-7 w-[90px] text-[10px] uppercase tracking-wider text-foreground">
-                          <SelectValue placeholder="Priority" />
-                        </SelectTrigger>
-                        <SelectContent className="text-foreground">
-                          <SelectItem value="none" className="text-muted-foreground">
-                            No Priority
-                          </SelectItem>
-                          <SelectItem value="low" className="text-foreground">
-                            Low
-                          </SelectItem>
-                          <SelectItem value="medium" className="text-foreground">
-                            Medium
-                          </SelectItem>
-                          <SelectItem value="high" className="text-foreground">
-                            High
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {canModifyBoard && addingTaskToListId !== list.id && (
-                <div className="p-2 pt-0">
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start gap-2 text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
-                    onClick={() => setAddingTaskToListId(list.id)}
-                  >
-                    <Plus size={16} /> Add a card
-                  </Button>
-                </div>
+                <Button
+                  variant="outline"
+                  className="h-12 w-full justify-start gap-2 rounded-xl border-dashed bg-secondary/30 text-foreground hover:bg-secondary/50"
+                  onClick={() => setIsAddingList(true)}
+                >
+                  <Plus size={16} /> Add another list
+                </Button>
               )}
             </div>
-          )
-        })}
+          )}
+        </div>
 
-        {canModifyBoard && (
-          <div className="w-80 flex-shrink-0">
-            {isAddingList ? (
-              <form
-                onSubmit={handleCreateList}
-                className="rounded-xl border bg-background p-3 shadow-sm"
-              >
-                <Input
-                  autoFocus
-                  placeholder="Enter list title..."
-                  value={newListTitle}
-                  onChange={(e) => setNewListTitle(e.target.value)}
-                  className="mb-3 h-9 text-sm text-foreground"
-                />
-
-                {/* Select Workflow Type for New List */}
-                <Select value={newListType} onValueChange={setNewListType}>
-                  <SelectTrigger className="mb-3 h-9 text-xs text-foreground">
-                    <SelectValue placeholder="List Workflow Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todo">To Do</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="review">Review</SelectItem>
-                    <SelectItem value="done" disabled={hasDoneList}>
-                      Done
-                    </SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <div className="mb-3 flex gap-1.5">
-                  {PRESET_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      onClick={() => setNewListColor(color)}
-                      className={`h-5 w-5 flex-shrink-0 rounded-full border-2 transition-all ${
-                        newListColor === color
-                          ? "scale-110 border-foreground shadow-sm"
-                          : "border-transparent hover:scale-105"
-                      }`}
-                      style={{ backgroundColor: color }}
-                      aria-label={`Select color ${color}`}
-                    />
-                  ))}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button type="submit" size="sm" disabled={isCreatingList || !newListTitle.trim()}>
-                    {isCreatingList ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      "Add list"
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-foreground"
-                    onClick={() => {
-                      setIsAddingList(false)
-                      setNewListTitle("")
-                      setNewListColor(PRESET_COLORS[0])
-                      setNewListType("custom")
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            ) : (
-              <Button
-                variant="outline"
-                className="h-12 w-full justify-start gap-2 rounded-xl border-dashed bg-secondary/30 text-foreground hover:bg-secondary/50"
-                onClick={() => setIsAddingList(true)}
-              >
-                <Plus size={16} /> Add another list
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
+        {/* GHOST OVERLAYS */}
+        <DragOverlay>
+          {activeDragType === "list" && activeDragList && (
+            <div className="flex max-h-[80vh] w-[300px] flex-col rounded-xl bg-muted/50 text-foreground opacity-80">
+              <ListColumn
+                list={activeDragList}
+                isOverlay
+                canModifyBoard={canModifyBoard}
+                hasDoneList={hasDoneList}
+                doneListsCount={doneListsCount}
+                currentUserId={currentUserId}
+                onEditList={handleEditList}
+                onDeleteClick={handleDeleteListClick}
+                onCreateTask={handleCreateTask}
+                isTaskPending={isTaskPending}
+                onTaskClick={setSelectedTask}
+                onTaskDeleteClick={setTaskToDelete}
+              />
+            </div>
+          )}
+          {activeDragType === "task" && activeDragTask && (
+            <div className="w-[280px] cursor-grabbing text-foreground opacity-80">
+              <TaskCard task={activeDragTask} isOverlay />
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
 
       {/* SMART DELETION / TASK MIGRATION MODAL */}
       <AlertDialog
@@ -569,7 +641,6 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
                 e.preventDefault()
                 confirmDeleteList()
               }}
-              // Disable deletion if there are tasks but no migration destination selected
               disabled={
                 isDeletingList ||
                 (listToDelete?.taskCount ? listToDelete.taskCount > 0 && !migrationListId : false)

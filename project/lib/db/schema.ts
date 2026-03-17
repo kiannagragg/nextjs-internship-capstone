@@ -160,7 +160,7 @@ export const lists = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     color: text("color"),
-    position: integer("position").notNull().default(0),
+    position: doublePrecision("position").notNull().default(0),
     type: listTypeEnum("type").default("custom").notNull(),
     isSystem: boolean("is_system").default(false).notNull(),
     createdById: uuid("created_by_id")

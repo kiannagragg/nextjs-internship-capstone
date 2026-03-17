@@ -50,14 +50,14 @@ export const updateTaskSchema = baseTaskSchema
   )
 
 export const moveTaskSchema = z.object({
-  taskId: z.string().uuid("Invalid Task ID"),
-  targetListId: z.string().uuid("Invalid Target List ID"),
-  position: z.number().min(0, "Position must be 0 or greater"),
+  taskId: z.string().min(1, "Task ID is required"),
+  listId: z.string().min(1, "Target List ID is required"),
+  position: z.number(),
 })
 
 export const assignTaskSchema = z.object({
-  taskId: z.string().uuid("Invalid Task ID"),
-  assigneeUserId: z.string().uuid("Invalid User ID"),
+  taskId: z.string().min(1, "Task ID is required"),
+  assigneeUserId: z.string().min(1, "User ID is required"),
 })
 
 export type CreateTaskInput = z.infer<typeof createTaskSchema>

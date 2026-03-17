@@ -13,6 +13,7 @@ import {
   unassignTask,
   reorderTasks,
   getTaskById,
+  getTasksByListId,
 } from "@/lib/db/queries/tasks"
 
 import { getUserProjectRole } from "@/lib/db/queries/projects"
@@ -119,19 +120,25 @@ export async function deleteTaskAction(taskId: string, projectId: string) {
 export async function moveTaskAction(data: unknown, projectId: string) {
   try {
     const { dbUserId: userId } = await requireAuth()
+    const { taskId, listId, position } = moveTaskSchema.parse(data)
 
-    const { taskId, targetListId, position } = moveTaskSchema.parse(data)
+    // 1. Check what the server is actually receiving
+    //console.log("SERVER RECEIVED:", { taskId, listId, position })
 
     const role = await getUserProjectRole(projectId, userId)
     if (!role) return { success: false, error: "Unauthorized: Not a project member." }
     if (role === "viewer")
       return { success: false, error: "Unauthorized: Viewers cannot move tasks." }
 
-    const updatedTask = await moveTask(taskId, targetListId, position, userId)
+    const updatedTask = await moveTask(taskId, listId, position, userId)
 
-    revalidatePath(`/projects/${projectId}`)
+    // 2. Check what the database actually returned
+    //console.log("DB RETURNED:", updatedTask)
+
+    revalidatePath(`/projects/${projectId}`, "layout")
     return { success: true, data: updatedTask }
   } catch (error) {
+    //console.error("MOVE TASK ACTION ERROR:", error)
     return { success: false, error: "Failed to move task." }
   }
 }
@@ -228,5 +235,41 @@ export async function reorderTasksAction(
     return { success: true }
   } catch (error) {
     return { success: false, error: "Failed to save new task order." }
+  }
+}
+
+/**
+ * Background task to re-space positions when they hit 0 or collide
+ */
+export async function rebalanceTasksAction(listId: string, projectId: string) {
+  try {
+    const { dbUserId: userId } = await requireAuth()
+
+    // 1. Enforce RBAC rules
+    const role = await getUserProjectRole(projectId, userId)
+    if (!role) return { success: false, error: "Unauthorized: Not a project member." }
+    if (role === "viewer")
+      return { success: false, error: "Unauthorized: Viewers cannot reorder tasks." }
+
+    // 2. Fetch using your existing cleanly abstracted query
+    const existingTasks = await getTasksByListId(listId)
+
+    if (!existingTasks || existingTasks.length === 0) {
+      return { success: true }
+    }
+
+    // 3. Map through them (TypeScript now perfectly understands what 'task' and 'index' are)
+    const updates = existingTasks.map((task, index) => ({
+      id: task.id,
+      position: (index + 1) * 1024, // Matches your createTask +1024 spacing
+    }))
+
+    // 4. Update the DB using your existing batch reorder query
+    await reorderTasks(updates)
+
+    revalidatePath(`/projects/${projectId}`)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: "Failed to rebalance task positions." }
   }
 }

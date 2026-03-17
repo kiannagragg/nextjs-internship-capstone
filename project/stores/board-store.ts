@@ -59,21 +59,33 @@ export const useBoardStore = create<BoardState>()(
 import { create } from "zustand"
 import type { ListWithTasks, TaskWithAssignees } from "@/types"
 
+type DragType = "list" | "task" | null
+
 interface BoardState {
   // Data
   projectId: string | null
   lists: ListWithTasks[]
 
+  // Drag & Drop UI State
+  activeDragItemId: string | null
+  activeDragType: DragType
+  activeDragTask: TaskWithAssignees | null
+  activeDragList: ListWithTasks | null
+
   // Actions
   setBoardData: (projectId: string, lists: ListWithTasks[]) => void
+  setActiveDragItem: (params: {
+    id: string
+    type: DragType
+    task?: TaskWithAssignees
+    list?: ListWithTasks
+  }) => void
+  clearActiveDragItem: () => void
+
   addListOptimistic: (list: ListWithTasks) => void
   updateListOptimistic: (listId: string, updates: Partial<ListWithTasks>) => void
   removeListOptimistic: (listId: string) => void
-
-  // Drag & Drop / Bulk Actions
   setListsOptimistic: (lists: ListWithTasks[]) => void
-
-  // Task Actions
   addTaskOptimistic: (listId: string, task: TaskWithAssignees) => void
   updateTaskOptimistic: (taskId: string, updates: Partial<TaskWithAssignees>) => void
   removeTaskOptimistic: (taskId: string) => void
@@ -83,10 +95,29 @@ export const useBoardStore = create<BoardState>((set) => ({
   projectId: null,
   lists: [],
 
-  // --- INITIALIZATION ---
+  activeDragItemId: null,
+  activeDragType: null,
+  activeDragTask: null,
+  activeDragList: null,
+
   setBoardData: (projectId, lists) => set({ projectId, lists }),
 
-  // --- LIST ACTIONS ---
+  setActiveDragItem: ({ id, type, task, list }) =>
+    set({
+      activeDragItemId: id,
+      activeDragType: type,
+      activeDragTask: task || null,
+      activeDragList: list || null,
+    }),
+
+  clearActiveDragItem: () =>
+    set({
+      activeDragItemId: null,
+      activeDragType: null,
+      activeDragTask: null,
+      activeDragList: null,
+    }),
+
   addListOptimistic: (list) => set((state) => ({ lists: [...state.lists, list] })),
 
   updateListOptimistic: (listId, updates) =>
@@ -99,11 +130,8 @@ export const useBoardStore = create<BoardState>((set) => ({
       lists: state.lists.filter((list) => list.id !== listId),
     })),
 
-  // --- DRAG & DROP ACTION ---
-  // Overwrites the entire lists array (used by dnd-kit after calculating new positions)
   setListsOptimistic: (newLists) => set({ lists: newLists }),
 
-  // --- TASK ACTIONS ---
   addTaskOptimistic: (listId, task) =>
     set((state) => ({
       lists: state.lists.map((list) =>
