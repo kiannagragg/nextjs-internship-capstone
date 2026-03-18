@@ -24,6 +24,7 @@ import {
   moveTaskSchema,
   assignTaskSchema,
 } from "@/lib/validations/task"
+import { redirect } from "next/navigation"
 
 /**
  * Create a new task
@@ -32,15 +33,34 @@ export async function createTaskAction(data: unknown) {
   try {
     const { dbUserId: userId } = await requireAuth()
 
-    const validatedData = createTaskSchema.parse(data)
+    if (!(data instanceof FormData)) {
+      return { success: false, error: "Invalid form data format." }
+    }
+
+    const rawData = {
+      title: data.get("title"),
+      description: data.get("description") || null,
+      priority: data.get("priority") || null,
+      listId: data.get("listId"),
+      projectId: data.get("projectId"),
+      startDate: data.get("startDate") ? new Date(data.get("startDate") as string) : null,
+      dueDate: data.get("dueDate") ? new Date(data.get("dueDate") as string) : null,
+    }
+
+    const validatedData = createTaskSchema.parse(rawData)
     const { listId, projectId, ...taskData } = validatedData
+
+    const labelsString = data.get("labels") as string
+    const labels = labelsString ? JSON.parse(labelsString) : []
+    const attachments = data.getAll("attachments") // Array of File objects
 
     const role = await getUserProjectRole(projectId, userId)
     if (!role) return { success: false, error: "Unauthorized: Not a project member." }
     if (role === "viewer")
       return { success: false, error: "Unauthorized: Viewers cannot create tasks." }
 
-    const task = await createTask(taskData, listId, projectId, userId)
+    // TO DO: Update `createTask` to accept attachments
+    const task = await createTask(taskData, listId, projectId, userId, labels)
 
     revalidatePath(`/projects/${projectId}`)
     return { success: true, data: task }

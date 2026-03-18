@@ -185,7 +185,7 @@ export function ListColumn({
             </Button>
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="sm"
               onClick={() => setIsEditing(false)}
               className="h-7 flex-1 text-xs text-foreground"
@@ -200,6 +200,9 @@ export function ListColumn({
           {...attributes}
           {...listeners}
           className="flex cursor-grab items-center justify-between rounded-t-xl p-3 transition-colors hover:bg-secondary/50 active:cursor-grabbing"
+          style={{
+            borderBottom: `2px solid ${list.color || "transparent"}`,
+          }}
         >
           <div className="flex items-center gap-2 font-semibold">
             {list.color && (
@@ -256,7 +259,7 @@ export function ListColumn({
       )}
 
       {/* TASKS AREA */}
-      <div className="flex flex-col gap-2 overflow-y-auto px-2 pb-2 pt-3">
+      <div className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden px-2 pb-2 pt-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {list.tasks?.map((task: any) => (
             <TaskCard
@@ -286,11 +289,11 @@ export function ListColumn({
                   onClick={handleSaveTask}
                   disabled={isTaskPending || !newTaskTitle.trim()}
                 >
-                  {isTaskPending ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : "Add Card"}
+                  {isTaskPending ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : "Add Task"}
                 </Button>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
                   className="h-7 text-xs text-foreground"
                   onClick={() => setIsAddingTask(false)}
@@ -306,11 +309,11 @@ export function ListColumn({
       {canModifyBoard && !isAddingTask && (
         <div className="p-2 pt-0">
           <Button
-            variant="ghost"
-            className="w-full justify-start gap-2 text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
+            variant="outline"
+            className="mt-2 w-full justify-start gap-2 bg-transparent text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
             onClick={() => setIsAddingTask(true)}
           >
-            <Plus size={16} /> Add a card
+            <Plus size={16} /> Add Task
           </Button>
         </div>
       )}

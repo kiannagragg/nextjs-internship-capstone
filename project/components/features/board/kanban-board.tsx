@@ -435,6 +435,66 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     await deleteList({ id, projectId, migrationListId: finalMigrationId })
   }
 
+  const handleUpdateTask = async (params: { taskId: string; data: any }) => {
+    const { taskId, data } = params
+    const sourceListId = selectedTask?.listId
+    const targetListId = data.listId
+
+    const isMovingList = targetListId && sourceListId && targetListId !== sourceListId
+
+    if (isMovingList) {
+      const targetList = storeLists.find((l) => l.id === targetListId)
+      const sortedTargetTasks = [...(targetList?.tasks || [])].sort(
+        (a, b) => a.position - b.position
+      )
+      const prevPosition = sortedTargetTasks[sortedTargetTasks.length - 1]?.position
+
+      const { position: newPosition, needsRebalance } = calculateFractionalPosition(
+        prevPosition,
+        undefined
+      )
+
+      const newLists = storeLists.map((list) => {
+        if (list.id === sourceListId) {
+          return {
+            ...list,
+            tasks: list.tasks?.filter((t: any) => t.id !== taskId) || [],
+          }
+        }
+        if (list.id === targetListId) {
+          return {
+            ...list,
+            tasks: [
+              ...(list.tasks || []),
+              { ...selectedTask, ...data, listId: targetListId, position: newPosition },
+            ].sort((a, b) => a.position - b.position),
+          }
+        }
+        return list
+      })
+
+      setBoardData(projectId, newLists)
+
+      await moveTask({
+        taskId,
+        listId: targetListId,
+        position: newPosition,
+      })
+
+      if (needsRebalance) {
+        rebalanceTasks(targetListId)
+      }
+    } else {
+      const newLists = storeLists.map((list) => ({
+        ...list,
+        tasks: list.tasks?.map((t: any) => (t.id === taskId ? { ...t, ...data } : t)) || [],
+      }))
+      setBoardData(projectId, newLists)
+    }
+
+    return await updateTask(params)
+  }
+
   const handleCreateTask = (listId: string, title: string, priority: string | null) => {
     createTask({ title, listId, projectId, priority })
   }
@@ -450,7 +510,7 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
       >
-        <div className="flex h-full items-start gap-6 overflow-x-auto pb-4 pt-2">
+        <div className="flex h-full items-start gap-6 overflow-x-auto pb-4 pt-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {/* DRAGGABLE LISTS CONTEXT */}
           <SortableContext items={listIds} strategy={horizontalListSortingStrategy}>
             {filteredLists.map((list) => (
@@ -681,7 +741,8 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
         task={selectedTask}
         isOpen={!!selectedTask}
         onClose={() => setSelectedTask(null)}
-        updateTask={updateTask}
+        updateTask={handleUpdateTask}
+        lists={storeLists}
       />
     </>
   )

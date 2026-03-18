@@ -113,7 +113,19 @@ export function useTasks(projectId: string) {
   }
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => createTaskAction(data),
+    // 1. Transform the plain object into FormData for the server action
+    mutationFn: async (data: any) => {
+      const formData = new FormData()
+      formData.append("title", data.title)
+      formData.append("listId", data.listId)
+      formData.append("projectId", data.projectId)
+
+      if (data.priority) formData.append("priority", data.priority)
+      if (data.description) formData.append("description", data.description)
+
+      return await createTaskAction(formData)
+    },
+    // 2. The optimistic update still gets the plain object (data), so this works perfectly!
     onMutate: async (newTaskData) => {
       await queryClient.cancelQueries({ queryKey })
       const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
@@ -125,7 +137,7 @@ export function useTasks(projectId: string) {
         title: newTaskData.title,
         description: newTaskData.description || null,
         priority: newTaskData.priority || "medium",
-        position: 999999,
+        position: 999999, // Puts it at the bottom visually
         isCompleted: false,
         completedAt: null,
         startDate: null,
@@ -154,6 +166,7 @@ export function useTasks(projectId: string) {
     },
     onSuccess: (result) => {
       if (result?.error) throw new Error(result.error)
+      // 3. This is what fixes your "needs a refresh" bug!
       queryClient.invalidateQueries({ queryKey })
       queryClient.invalidateQueries({ queryKey: projectsQueryKey })
       toast({ title: "Task created" })

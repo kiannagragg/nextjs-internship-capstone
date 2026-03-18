@@ -1,6 +1,15 @@
-import { eq, and, asc, desc, count, sql, lte, gte, isNull } from "drizzle-orm"
+import { eq, and, asc, desc, count, sql, lte, gte, isNull, inArray } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { tasks, taskAssignees, activityLogs, lists, projects, type NewTask } from "@/lib/db/schema"
+import {
+  tasks,
+  taskAssignees,
+  activityLogs,
+  lists,
+  projects,
+  labels,
+  taskLabels,
+  type NewTask,
+} from "@/lib/db/schema"
 
 /**
  * Get all tasks in a project, ordered by position within each list.
@@ -70,7 +79,8 @@ export async function createTask(
   data: Pick<NewTask, "title" | "description" | "priority" | "startDate" | "dueDate">,
   listId: string,
   projectId: string,
-  createdById: string
+  createdById: string,
+  labelNames?: string[]
 ) {
   const [targetList] = await db
     .select({ type: lists.type })
@@ -106,6 +116,48 @@ export async function createTask(
 
   if (!task) {
     throw new Error("Failed to create task. Database returned undefined.")
+  }
+
+  if (labelNames && labelNames.length > 0) {
+    // a. Find existing labels in this project that match the names
+    const existingLabels = await db
+      .select({ id: labels.id, name: labels.name })
+      .from(labels)
+      .where(and(eq(labels.projectId, projectId), inArray(labels.name, labelNames)))
+
+    // b. Determine which labels need to be created
+    const existingLabelNames = existingLabels.map((l) => l.name)
+    const newLabelNames = labelNames.filter((name) => !existingLabelNames.includes(name))
+
+    let newCreatedLabels: { id: string }[] = []
+
+    // c. Insert new labels
+    if (newLabelNames.length > 0) {
+      const labelsToInsert = newLabelNames.map((name) => ({
+        projectId,
+        name,
+        // Optional: you could randomly generate a color here, or hardcode a default
+        color: "#6B7280",
+      }))
+
+      newCreatedLabels = await db.insert(labels).values(labelsToInsert).returning({ id: labels.id })
+    }
+
+    // d. Combine all label IDs (existing + newly created)
+    const allLabelIdsToLink = [
+      ...existingLabels.map((l) => l.id),
+      ...newCreatedLabels.map((l) => l.id),
+    ]
+
+    // e. Link them to the task in the join table
+    if (allLabelIdsToLink.length > 0) {
+      const taskLabelsToInsert = allLabelIdsToLink.map((labelId) => ({
+        taskId: task.id,
+        labelId,
+      }))
+
+      await db.insert(taskLabels).values(taskLabelsToInsert)
+    }
   }
 
   await db.insert(activityLogs).values({

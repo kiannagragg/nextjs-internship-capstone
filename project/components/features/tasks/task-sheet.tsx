@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Loader2, Plus, Send } from "lucide-react"
+import { Loader2, Plus, Send, Paperclip, Tags, X } from "lucide-react"
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
@@ -14,18 +14,52 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { DatePicker } from "@/components/shared/date-picker"
+import { RichTextEditor } from "@/components/shared/rich-text-editor"
 
 interface TaskSheetProps {
   task: any | null
   isOpen: boolean
   onClose: () => void
   updateTask: (params: { taskId: string; data: any }) => Promise<any>
+  lists?: { id: string; title: string }[]
 }
 
-export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps) {
+export function TaskSheet({ task, isOpen, onClose, updateTask, lists = [] }: TaskSheetProps) {
   const [title, setTitle] = useState(task?.title || "")
   const [description, setDescription] = useState(task?.description || "")
   const [priority, setPriority] = useState<string | null>(task?.priority || null)
+
+  const [listId, setListId] = useState<string>(task?.listId || "")
+  const [labels, setLabels] = useState<string[]>(
+    Array.isArray(task?.labels)
+      ? task.labels
+          .map((item: any) => {
+            // If it's already a string, just return it
+            if (typeof item === "string") return item
+            // If it's a database relationship object, extract the actual name
+            // (Adjust .name to .title or whatever your label object uses if needed)
+            return item.label?.name || item.label?.title || item.labelId || ""
+          })
+          .filter(Boolean) // Remove any empty strings
+      : []
+  )
+  const [labelInput, setLabelInput] = useState("")
+
+  const handleAddLabel = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && labelInput.trim()) {
+      e.preventDefault()
+      if (!labels.includes(labelInput.trim())) {
+        setLabels([...labels, labelInput.trim()])
+      }
+      setLabelInput("")
+    }
+  }
+
+  const handleRemoveLabel = (labelToRemove: string) => {
+    setLabels(labels.filter((l) => l !== labelToRemove))
+  }
+
+  const [files, setFiles] = useState<FileList | null>(null)
 
   const [startDate, setStartDate] = useState<Date | undefined>(
     task?.startDate ? new Date(task.startDate) : undefined
@@ -52,25 +86,26 @@ export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps)
       newErrors.dates = "Due date cannot be before the start date."
     }
 
-    // If there are errors, stop saving and display them
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       return
     }
 
-    // Clear errors if validation passes
     setErrors({})
     setIsSaving(true)
 
     try {
+      //TO DO: upload files to the server here
       await updateTask({
         taskId: task.id,
         data: {
           title: title.trim(),
           description,
           priority,
+          listId,
           startDate: startDate ?? null,
           dueDate: dueDate ?? null,
+          labels,
         },
       })
       onClose()
@@ -85,7 +120,7 @@ export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps)
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-3xl">
+      <SheetContent className="w-full overflow-y-auto p-0 sm:max-w-5xl">
         <div className="border-b border-muted p-6">
           <SheetHeader>
             <SheetTitle className="text-2xl font-bold">Task Details</SheetTitle>
@@ -93,7 +128,6 @@ export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps)
           </SheetHeader>
         </div>
 
-        {/* 2-Column Grid Layout */}
         <div className="grid grid-cols-1 gap-8 p-6 md:grid-cols-2">
           {/* LEFT COLUMN: FORM */}
           <div className="space-y-6">
@@ -106,7 +140,6 @@ export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps)
               </div>
               <Input
                 value={title}
-                // Clear the error specifically for this field when the user types
                 onChange={(e) => {
                   setTitle(e.target.value)
                   if (errors.title) setErrors({ ...errors, title: undefined })
@@ -122,23 +155,31 @@ export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps)
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Description
               </label>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Add a more detailed description..."
-                className="min-h-[100px] resize-y text-foreground"
-              />
+              <RichTextEditor value={description} onChange={setDescription} />
             </div>
 
-            {/* Placeholder for List/Status changing */}
+            {/* STATUS FIELD */}
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Status (List)
               </label>
-              <Select disabled>
-                <SelectTrigger>
-                  <SelectValue placeholder="In Progress (Coming Soon)" />
+              <Select value={listId} onValueChange={setListId}>
+                <SelectTrigger className="text-foreground">
+                  <SelectValue placeholder="Select a list" />
                 </SelectTrigger>
+                <SelectContent>
+                  {lists.length > 0 ? (
+                    lists.map((list) => (
+                      <SelectItem key={list.id} value={list.id} className="text-foreground">
+                        {list.title}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value={listId} className="text-foreground">
+                      Current List
+                    </SelectItem>
+                  )}
+                </SelectContent>
               </Select>
             </div>
 
@@ -170,43 +211,87 @@ export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps)
               </Select>
             </div>
 
+            {/* LABELS FIELD */}
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Start Date
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                <Tags className="h-3.5 w-3.5" /> Labels
               </label>
-              <DatePicker
-                value={startDate}
-                onChange={(date) => {
-                  setStartDate(date)
-                  if (errors.dates) setErrors({ ...errors, dates: undefined })
-                }}
-                placeholder="Select start date"
-                className={`text-foreground ${errors.dates ? "border-red-500" : ""}`}
+              <div className="mb-2 flex flex-wrap gap-2">
+                {labels.map((label) => (
+                  <span
+                    key={label}
+                    className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
+                  >
+                    {label}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLabel(label)}
+                      className="hover:text-foreground"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <Input
+                value={labelInput}
+                onChange={(e) => setLabelInput(e.target.value)}
+                onKeyDown={handleAddLabel}
+                placeholder="Type a label and press Enter..."
+                className="text-foreground"
               />
             </div>
 
+            {/* ATTACHMENTS FIELD */}
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Due Date
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                <Paperclip className="h-3.5 w-3.5" /> Attachments
               </label>
-              <DatePicker
-                value={dueDate}
-                onChange={(date) => {
-                  setDueDate(date)
-                  if (errors.dates) setErrors({ ...errors, dates: undefined })
-                }}
-                placeholder="Select due date"
-                className={`text-foreground ${errors.dates ? "border-red-500" : ""}`}
-                disabledDates={(date) => (startDate ? date < startDate : false)}
+              <Input
+                type="file"
+                multiple
+                onChange={(e) => setFiles(e.target.files)}
+                className="cursor-pointer text-foreground file:text-foreground"
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Start Date
+                </label>
+                <DatePicker
+                  value={startDate}
+                  onChange={(date) => {
+                    setStartDate(date)
+                    if (errors.dates) setErrors({ ...errors, dates: undefined })
+                  }}
+                  placeholder="Select start date"
+                  className={`w-full text-foreground ${errors.dates ? "border-red-500" : ""}`}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Due Date
+                </label>
+                <DatePicker
+                  value={dueDate}
+                  onChange={(date) => {
+                    setDueDate(date)
+                    if (errors.dates) setErrors({ ...errors, dates: undefined })
+                  }}
+                  placeholder="Select due date"
+                  className={`test-sm w-full text-foreground ${errors.dates ? "border-red-500" : ""}`}
+                  disabledDates={(date) => (startDate ? date < startDate : false)}
+                />
+              </div>
+            </div>
             {errors.dates && <p className="text-xs text-red-500">{errors.dates}</p>}
 
             <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                Assignees{" "}
-                <span className="font-normal normal-case">(optional - you can assign later)</span>
+                Assignees <span className="font-normal normal-case">(optional)</span>
               </label>
               <div className="flex items-center gap-2">
                 <Avatar className="h-8 w-8">
@@ -226,11 +311,10 @@ export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps)
 
           {/* RIGHT COLUMN: ACTIVITY */}
           <div className="space-y-6 md:border-l md:border-muted md:pl-8">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            <h3 className="font-sans text-xs font-bold uppercase text-muted-foreground">
               Activity
             </h3>
 
-            {/* Mockup Activity Log */}
             <div className="space-y-4">
               <div className="flex items-start justify-between text-sm">
                 <p className="text-muted-foreground">
@@ -240,7 +324,6 @@ export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps)
                 <span className="text-xs text-muted-foreground">1hr ago</span>
               </div>
 
-              {/* Mockup Comment */}
               <div className="rounded-lg border bg-muted/50 p-3">
                 <div className="mb-1 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -257,7 +340,6 @@ export function TaskSheet({ task, isOpen, onClose, updateTask }: TaskSheetProps)
               </div>
             </div>
 
-            {/* Comment Input Box */}
             <div className="relative mt-auto pt-4">
               <Textarea
                 placeholder="Write a comment..."
