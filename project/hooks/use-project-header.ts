@@ -30,7 +30,7 @@ export function useProjectHeaderLogic(project: ProjectCardData, isPinned?: boole
         : project.isPinned
 
   // --- Handlers ---
-  const handleTogglePin = useCallback(() => {
+  const handleTogglePin = () => {
     const currentState = optimisticPinned
     const newState = !currentState
 
@@ -49,7 +49,7 @@ export function useProjectHeaderLogic(project: ProjectCardData, isPinned?: boole
         // Mutation failed — revert local override
         setLocalPinOverride(null)
       })
-  }, [optimisticPinned, project.id, togglePin])
+  }
 
   const handleToggleStatus = () => {
     const newStatus = project.status === "completed" ? "active" : "completed"
@@ -103,15 +103,20 @@ export function useProjectHeaderLogic(project: ProjectCardData, isPinned?: boole
     return "Just now"
   }
 
-  const progressData = calculateProgress(project._count)
-  const updatedText = getTimeAgo(project.updatedAt)
-  const dueDateText = project.dueDate
-    ? new Date(project.dueDate).toLocaleDateString("en-US", {
+  const activeProject = cachedProject || project
+
+  const progressData = calculateProgress(activeProject._count)
+  const updatedText = getTimeAgo(activeProject.updatedAt)
+  const dueDateText = activeProject.dueDate
+    ? new Date(activeProject.dueDate).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
       })
     : "No due date"
+
+  const showCompletionPrompt =
+    progressData.percent === 100 && activeProject.status === "active" && !activeProject.isArchived
 
   return {
     state: { isAddMemberOpen, showDeleteDialog, searchQuery, isDeleting, optimisticPinned },
@@ -125,6 +130,6 @@ export function useProjectHeaderLogic(project: ProjectCardData, isPinned?: boole
       handleInviteMember,
       openEditProjectModal: () => openEditProjectModal(project),
     },
-    viewData: { progressData, updatedText, dueDateText },
+    viewData: { progressData, updatedText, dueDateText, showCompletionPrompt },
   }
 }

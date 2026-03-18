@@ -102,9 +102,10 @@ export async function RecentActivity() {
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-display text-base font-semibold text-foreground">Recent Activity</h2>
-        <button className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+        {/*<button className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
           View All
         </button>
+        */}
       </div>
 
       {/* Scrollable list */}

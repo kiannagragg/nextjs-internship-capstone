@@ -19,6 +19,7 @@ import { SortableContext, horizontalListSortingStrategy, arrayMove } from "@dnd-
 import { useBoardStore } from "@/stores/board-store"
 import { useTasks } from "@/hooks/use-tasks"
 import { useLists } from "@/hooks/use-lists"
+import { useTaskFilter } from "@/hooks/use-task-filter"
 import { calculateFractionalPosition } from "@/lib/utils"
 
 import { Button } from "@/components/ui/button"
@@ -91,6 +92,7 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     }
   }, [projectId, queryLists, setBoardData])
 
+  const filteredLists = useTaskFilter(storeLists, currentUserId)
   // --- PERMISSIONS & RULES ---
   const userMembership = project?.members?.find((m: any) => m.userId === currentUserId)
   const userRole = userMembership?.role || "viewer"
@@ -344,20 +346,10 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
       // =====================================================
       // POSITION CALCULATION (SAFE)
       // =====================================================
-      let newPosition: number
-
-      if (prevPosition !== undefined && nextPosition !== undefined) {
-        newPosition = (prevPosition + nextPosition) / 2
-      } else if (prevPosition !== undefined) {
-        newPosition = prevPosition + 65536
-      } else if (nextPosition !== undefined) {
-        newPosition = nextPosition / 2
-      } else {
-        newPosition = 65536
-      }
-
-      newPosition = Math.round(newPosition)
-
+      const { position: newPosition, needsRebalance } = calculateFractionalPosition(
+        prevPosition,
+        nextPosition
+      )
       // =====================================================
       // OPTIMISTIC UI UPDATE (CLEAN & SAFE)
       // =====================================================
@@ -394,11 +386,16 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
         taskId: activeId,
         listId: targetListId,
         position: newPosition,
+      }).then(() => {
+        if (needsRebalance) {
+          rebalanceTasks(targetListId)
+        }
       })
 
       clearActiveDragItem()
     }
   }
+
   // --- ACTIONS ---
   const handleCreateList = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -456,7 +453,7 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
         <div className="flex h-full items-start gap-6 overflow-x-auto pb-4 pt-2">
           {/* DRAGGABLE LISTS CONTEXT */}
           <SortableContext items={listIds} strategy={horizontalListSortingStrategy}>
-            {storeLists.map((list) => (
+            {filteredLists.map((list) => (
               <ListColumn
                 key={list.id}
                 list={list}
@@ -474,7 +471,7 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
             ))}
           </SortableContext>
 
-          {/* ADD NEW LIST FORM */}
+          {/* ADD LIST FORM */}
           {canModifyBoard && (
             <div className="w-80 flex-shrink-0">
               {isAddingList ? (

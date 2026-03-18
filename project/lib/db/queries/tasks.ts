@@ -1,6 +1,6 @@
 import { eq, and, asc, desc, count, sql, lte, gte, isNull } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { tasks, taskAssignees, activityLogs, lists, type NewTask } from "@/lib/db/schema"
+import { tasks, taskAssignees, activityLogs, lists, projects, type NewTask } from "@/lib/db/schema"
 
 /**
  * Get all tasks in a project, ordered by position within each list.
@@ -117,6 +117,8 @@ export async function createTask(
     metadata: { title: task.title, listType: targetList.type },
   })
 
+  await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId))
+
   return task
 }
 
@@ -128,7 +130,14 @@ export async function updateTask(
   data: Partial<Pick<NewTask, "title" | "description" | "priority" | "startDate" | "dueDate">>,
   userId: string
 ) {
-  const [updated] = await db.update(tasks).set(data).where(eq(tasks.id, taskId)).returning()
+  const [updated] = await db
+    .update(tasks)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(tasks.id, taskId))
+    .returning()
 
   if (updated) {
     await db.insert(activityLogs).values({
@@ -139,6 +148,11 @@ export async function updateTask(
       entityId: taskId,
       metadata: data,
     })
+
+    await db
+      .update(projects)
+      .set({ updatedAt: new Date() })
+      .where(eq(projects.id, updated.projectId))
   }
 
   return updated ?? null
@@ -169,6 +183,8 @@ export async function deleteTask(taskId: string, userId: string) {
     entityId: taskId,
     metadata: { title: task.title },
   })
+
+  await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, task.projectId))
 }
 
 /**
@@ -239,6 +255,11 @@ export async function moveTask(
       },
     })
   }
+
+  await db
+    .update(projects)
+    .set({ updatedAt: new Date() })
+    .where(eq(projects.id, currentTask.projectId))
 
   return updated ?? null
 }

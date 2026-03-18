@@ -1,5 +1,6 @@
 import { Plus, UserPlus, ClipboardList } from "lucide-react"
 import { CreateProjectButton } from "@/components/features/projects/create-project-button"
+import { CreateTaskButton } from "@/components/features/tasks/create-task-button"
 
 export function QuickActions() {
   return (
@@ -19,7 +20,9 @@ export function QuickActions() {
           </div>
           <div>
             <p className="font-display text-sm font-semibold">Create New Project</p>
-            <p className="text-xs opacity-60">Set up new project and invite your team</p>
+            <p className="text-xs font-medium opacity-60">
+              Set up new project and invite your team
+            </p>
           </div>
         </CreateProjectButton>
 
@@ -35,7 +38,7 @@ export function QuickActions() {
         </button>
 
         {/* Create Task */}
-        <button className="group flex items-center gap-4 rounded-xl border border-border p-5 text-left transition-colors hover:bg-accent/50">
+        <CreateTaskButton className="group flex items-center gap-4 rounded-xl border border-border p-5 text-left transition-colors hover:bg-accent/50">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
             <ClipboardList size={20} className="text-muted-foreground" />
           </div>
@@ -43,7 +46,7 @@ export function QuickActions() {
             <p className="font-display text-sm font-semibold text-foreground">Create Task</p>
             <p className="text-xs text-muted-foreground">Add a task directly to any project</p>
           </div>
-        </button>
+        </CreateTaskButton>
       </div>
     </div>
   )

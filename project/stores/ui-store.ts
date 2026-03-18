@@ -62,6 +62,10 @@ interface UIState {
   editingProject: ProjectCardData | null
   openEditProjectModal: (project: ProjectCardData) => void
   closeEditProjectModal: () => void
+
+  isCreateTaskModalOpen: boolean
+  openCreateTaskModal: () => void
+  closeCreateTaskModal: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -73,4 +77,8 @@ export const useUIStore = create<UIState>((set) => ({
   editingProject: null,
   openEditProjectModal: (project) => set({ isEditProjectModalOpen: true, editingProject: project }),
   closeEditProjectModal: () => set({ isEditProjectModalOpen: false, editingProject: null }),
+
+  isCreateTaskModalOpen: false,
+  openCreateTaskModal: () => set({ isCreateTaskModalOpen: true }),
+  closeCreateTaskModal: () => set({ isCreateTaskModalOpen: false }),
 }))

@@ -245,7 +245,7 @@ export function ListColumn({
                   </>
                 )}
                 {isOnlyDoneList && (
-                  <DropdownMenuItem disabled className="text-xs italic text-muted-foreground">
+                  <DropdownMenuItem disabled className="text-xs text-muted-foreground">
                     Cannot delete final &quot;Done&quot; list
                   </DropdownMenuItem>
                 )}

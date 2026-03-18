@@ -121,11 +121,15 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const { toast } = useToast()
   const { openEditProjectModal } = useUIStore()
 
-  const { deleteProject, isDeleting, togglePin, toggleStatus, toggleArchive } = useProjects()
+  const { deleteProject, isDeleting, togglePin, toggleStatus, toggleArchive, getProjectFromCache } =
+    useProjects()
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const isAdmin = project.memberRole === "admin"
   const isCardBusy = isDeleting
+
+  const cachedProject = getProjectFromCache(project.id)
+  const activeProject = cachedProject || project
 
   // --- Handlers ---
 
@@ -156,10 +160,10 @@ export function ProjectCard({ project }: ProjectCardProps) {
   }
 
   // --- Pre-computed View Data ---
-  const progress = calculateProgress(project._count)
-  const dateInfo = getProjectDateStatus(project)
-  const displayMembers = project.members?.slice(0, 3) || []
-  const remainingMembers = (project.members?.length || 0) - 3
+  const progress = calculateProgress(activeProject._count)
+  const dateInfo = getProjectDateStatus(activeProject)
+  const displayMembers = activeProject.members?.slice(0, 3) || []
+  const remainingMembers = (activeProject.members?.length || 0) - 3
 
   return (
     <>

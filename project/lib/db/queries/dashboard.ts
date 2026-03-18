@@ -94,12 +94,40 @@ export async function getDashboardStats(userId: string) {
 
   const completedTrend = (thisWeekCompleted?.count ?? 0) - (lastWeekCompleted?.count ?? 0)
 
+  // Trends: active projects created this week vs last week
+  const [thisWeekProjects] = await db
+    .select({ count: count() })
+    .from(projects)
+    .where(
+      and(
+        inArray(projects.id, projectIds),
+        eq(projects.status, "active"),
+        eq(projects.isArchived, false),
+        gte(projects.createdAt, oneWeekAgo)
+      )
+    )
+
+  const [lastWeekProjects] = await db
+    .select({ count: count() })
+    .from(projects)
+    .where(
+      and(
+        inArray(projects.id, projectIds),
+        eq(projects.status, "active"),
+        eq(projects.isArchived, false),
+        gte(projects.createdAt, twoWeeksAgo),
+        sql`${projects.createdAt} < ${oneWeekAgo}`
+      )
+    )
+
+  const activeTrend = (thisWeekProjects?.count ?? 0) - (lastWeekProjects?.count ?? 0)
+
   return {
     activeProjects: activeProjectsResult?.count ?? 0,
     pendingTasks: taskStats?.pending ?? 0,
     completedTasks: taskStats?.completed ?? 0,
     teamMembers: Number(teamResult?.count ?? 0),
-    activeProjectsTrend: 0, // Projects change slowly, trend less meaningful
+    activeProjectsTrend: activeTrend,
     pendingTasksTrend: 0,
     completedTasksTrend: completedTrend,
     teamMembersTrend: 0,

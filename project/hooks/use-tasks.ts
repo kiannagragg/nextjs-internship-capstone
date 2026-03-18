@@ -78,13 +78,47 @@ import type { ListWithTasks, TaskWithAssignees } from "@/types"
 export function useTasks(projectId: string) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
+
   const queryKey = ["project-lists", projectId]
+  const projectsQueryKey = ["projects"]
+
+  const updateProjectCache = (taskDelta: number, completedDelta: number) => {
+    const previousProjects = queryClient.getQueryData(projectsQueryKey)
+    const now = new Date()
+
+    queryClient.setQueriesData({ queryKey: projectsQueryKey }, (oldData: any) => {
+      if (!oldData) return oldData
+
+      // If cached data is an array of projects
+      if (Array.isArray(oldData)) {
+        return oldData.map((p) => {
+          if (p.id === projectId) {
+            return {
+              ...p,
+              updatedAt: now,
+              _count: {
+                ...p._count,
+                tasks: Math.max(0, (p._count?.tasks || 0) + taskDelta),
+                completedTasks: Math.max(0, (p._count?.completedTasks || 0) + completedDelta),
+              },
+            }
+          }
+          return p
+        })
+      }
+      return oldData
+    })
+
+    return previousProjects
+  }
 
   const createMutation = useMutation({
     mutationFn: (data: any) => createTaskAction(data),
     onMutate: async (newTaskData) => {
       await queryClient.cancelQueries({ queryKey })
       const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
+
+      const previousProjects = updateProjectCache(1, 0)
 
       const tempTask: TaskWithAssignees = {
         id: `temp-${Date.now()}`,
@@ -116,15 +150,17 @@ export function useTasks(projectId: string) {
         })
       })
 
-      return { previousLists }
+      return { previousLists, previousProjects }
     },
     onSuccess: (result) => {
       if (result?.error) throw new Error(result.error)
       queryClient.invalidateQueries({ queryKey })
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey })
       toast({ title: "Task created" })
     },
     onError: (err: any, _, context) => {
       queryClient.setQueryData(queryKey, context?.previousLists)
+      queryClient.setQueryData(projectsQueryKey, context?.previousProjects)
       toast({ variant: "destructive", title: "Failed to create task", description: err.message })
     },
   })
@@ -136,6 +172,21 @@ export function useTasks(projectId: string) {
       await queryClient.cancelQueries({ queryKey })
       const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
 
+      let completedDelta = 0
+      if (data.isCompleted !== undefined) {
+        let oldTask: TaskWithAssignees | undefined
+        previousLists?.forEach((list) => {
+          const found = list.tasks.find((t) => t.id === taskId)
+          if (found) oldTask = found
+        })
+        if (oldTask && oldTask.isCompleted !== data.isCompleted) {
+          completedDelta = data.isCompleted ? 1 : -1
+        }
+      }
+
+      // ✅ Always run this to bump the timestamp, passing the calculated completedDelta
+      const previousProjects = updateProjectCache(0, completedDelta)
+
       queryClient.setQueryData<ListWithTasks[]>(queryKey, (old) => {
         if (!old) return []
         return old.map((list) => ({
@@ -144,14 +195,16 @@ export function useTasks(projectId: string) {
         }))
       })
 
-      return { previousLists }
+      return { previousLists, previousProjects }
     },
     onSuccess: (result) => {
       if (result?.error) throw new Error(result.error)
       queryClient.invalidateQueries({ queryKey })
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey })
     },
     onError: (err: any, _, context) => {
       queryClient.setQueryData(queryKey, context?.previousLists)
+      queryClient.setQueryData(projectsQueryKey, context?.previousProjects)
       toast({ variant: "destructive", title: "Failed to update task", description: err.message })
     },
   })
@@ -162,6 +215,14 @@ export function useTasks(projectId: string) {
       await queryClient.cancelQueries({ queryKey })
       const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
 
+      let wasCompleted = false
+      previousLists?.forEach((list) => {
+        const found = list.tasks.find((t) => t.id === taskId)
+        if (found && found.isCompleted) wasCompleted = true
+      })
+
+      const previousProjects = updateProjectCache(-1, wasCompleted ? -1 : 0)
+
       queryClient.setQueryData<ListWithTasks[]>(queryKey, (old) => {
         if (!old) return []
         return old.map((list) => ({
@@ -170,15 +231,17 @@ export function useTasks(projectId: string) {
         }))
       })
 
-      return { previousLists }
+      return { previousLists, previousProjects }
     },
     onSuccess: (result) => {
       if (result?.error) throw new Error(result.error)
       toast({ title: "Task deleted" })
       queryClient.invalidateQueries({ queryKey })
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey })
     },
     onError: (err: any, _, context) => {
       queryClient.setQueryData(queryKey, context?.previousLists)
+      queryClient.setQueryData(projectsQueryKey, context?.previousProjects)
       toast({ variant: "destructive", title: "Failed to delete task", description: err.message })
     },
   })
@@ -199,6 +262,8 @@ export function useTasks(projectId: string) {
     onMutate: async ({ taskId, listId, position }) => {
       await queryClient.cancelQueries({ queryKey })
       const previousLists = queryClient.getQueryData<ListWithTasks[]>(queryKey)
+
+      const previousProjects = updateProjectCache(0, 0)
 
       queryClient.setQueryData<ListWithTasks[]>(queryKey, (old) => {
         if (!old) return []
@@ -224,15 +289,17 @@ export function useTasks(projectId: string) {
         })
       })
 
-      return { previousLists }
+      return { previousLists, previousProjects }
     },
     onSuccess: () => {
       // 2. Clean success block - only runs if no error was thrown above
       queryClient.invalidateQueries({ queryKey })
+      queryClient.invalidateQueries({ queryKey: ["projects"] })
     },
     onError: (err: any, _, context) => {
       // 3. This will finally run and show us the ghost!
       queryClient.setQueryData(queryKey, context?.previousLists)
+      queryClient.setQueryData(projectsQueryKey, context?.previousProjects)
       toast({ variant: "destructive", title: "Failed to move task", description: err.message })
     },
   })

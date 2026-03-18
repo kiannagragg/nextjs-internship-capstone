@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { useSearchParams } from "next/navigation"
 import { FolderKanban, Loader2, AlertCircle } from "lucide-react"
 
 import { useProjects } from "@/hooks/use-projects"
@@ -8,50 +9,118 @@ import { ProjectCard } from "./project-card"
 import { CreateProjectButton } from "./create-project-button"
 import type { ProjectCardData } from "@/types/index"
 
-interface ProjectListProps {
-  searchParams?: {
-    query?: string
-    view?: string
-  }
-}
+const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 }
 
-export function ProjectList({ searchParams }: ProjectListProps) {
-  const query = searchParams?.query || ""
-  const view = searchParams?.view || "active"
+export function ProjectList() {
+  const searchParams = useSearchParams()
 
-  //Destructure isError and error from React Query hook
-  const { projects, isLoading, isError, error } = useProjects(
-    searchParams as Record<string, string>
-  )
+  const query = searchParams.get("query")?.toLowerCase() || ""
+  const view = searchParams.get("view") || "active"
+  const sortBy = searchParams.get("sortBy") || "updatedAt"
+  const sortDir = searchParams.get("sortDir") || "desc"
 
-  // Memoize the filtering logic to prevent expensive recalculations on re-renders
-  const { pinnedProjects, otherProjects } = useMemo(() => {
-    if (!projects) return { pinnedProjects: [], otherProjects: [] }
+  const priorityParam = searchParams.get("priority")
+  const statusParam = searchParams.get("status")
+  const isOverdue = searchParams.get("overdue") === "true"
+  const isPinnedOnly = searchParams.get("pinned") === "true"
 
-    if (view === "active") {
+  const { projects, isLoading, isError, error } = useProjects({ view })
+
+  // --- FILTER & SORT LOGIC ---
+  const { pinnedProjects, otherProjects, totalFiltered } = useMemo(() => {
+    if (!projects) return { pinnedProjects: [], otherProjects: [], totalFiltered: 0 }
+
+    const now = new Date()
+
+    const priorities = priorityParam ? priorityParam.split(",") : []
+    const statuses = statusParam ? statusParam.split(",") : []
+
+    // FILTER
+    let filtered = projects.filter((p: ProjectCardData) => {
+      // Search query
+      if (query && !p.title.toLowerCase().includes(query)) return false
+
+      // View (active/archived)
+      if (view === "archived" && !p.isArchived) return false
+      if (view === "active" && p.isArchived) return false
+
+      if (view === "active" && p.status !== "active") return false
+      if (view === "completed" && p.status !== "completed") return false
+
+      // Priority checkboxes
+      if (priorities.length > 0 && !priorities.includes(p.priority)) return false
+
+      // Status checkboxes
+      if (statuses.length > 0 && !statuses.includes(p.status)) return false
+
+      // Quick Filters
+      if (isPinnedOnly && !p.isPinned) return false
+      if (isOverdue) {
+        if (!p.dueDate || p.status !== "active") return false
+        if (new Date(p.dueDate) >= now) return false
+      }
+
+      return true
+    })
+
+    // SORT
+    filtered = filtered.sort((a, b) => {
+      let comparison = 0
+
+      switch (sortBy) {
+        case "title":
+          comparison = a.title.localeCompare(b.title)
+          break
+        case "priority":
+          const pA = PRIORITY_ORDER[a.priority as string] ?? 99
+          const pB = PRIORITY_ORDER[b.priority as string] ?? 99
+          comparison = pA - pB
+          break
+        case "progress":
+          const getProgress = (p: ProjectCardData) =>
+            p._count?.tasks ? p._count.completedTasks / p._count.tasks : 0
+          comparison = getProgress(a) - getProgress(b)
+          break
+        case "dueDate":
+          if (!a.dueDate) return sortDir === "asc" ? 1 : -1
+          if (!b.dueDate) return sortDir === "asc" ? -1 : 1
+          comparison = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+          break
+        case "createdAt":
+          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          break
+        case "updatedAt":
+        default:
+          comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime()
+          break
+      }
+
+      return sortDir === "desc" ? -comparison : comparison
+    })
+
+    if (view === "active" && !isPinnedOnly) {
       return {
-        pinnedProjects: projects.filter((p: ProjectCardData) => p.isPinned),
-        otherProjects: projects.filter((p: ProjectCardData) => !p.isPinned),
+        pinnedProjects: filtered.filter((p) => p.isPinned),
+        otherProjects: filtered.filter((p) => !p.isPinned),
+        totalFiltered: filtered.length,
       }
     }
 
-    // If we are looking at "archived" (or any other view), no pinned separation is needed
     return {
       pinnedProjects: [],
-      otherProjects: projects,
+      otherProjects: filtered,
+      totalFiltered: filtered.length,
     }
-  }, [projects, view])
+  }, [projects, query, view, sortBy, sortDir, priorityParam, statusParam, isOverdue, isPinnedOnly])
 
-  // --- LOADING STATE ---
-  if (isLoading) {
+  // --- STATES ---
+  if (isLoading)
     return (
-      <div className="flex items-center justify-center py-20">
+      <div className="flex justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     )
-  }
 
-  // --- ERROR STATE ---
   if (isError) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-red-200 bg-red-50/50 py-20 text-red-800 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
@@ -64,23 +133,20 @@ export function ProjectList({ searchParams }: ProjectListProps) {
     )
   }
 
-  // --- EMPTY STATES ---
   if (!projects || projects.length === 0) {
-    // True empty state (no projects exist yet)
-    if (!query && view === "active") {
-      return (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-card py-20 text-card-foreground shadow-sm">
-          <FolderKanban className="mb-4 h-12 w-12 text-muted-foreground" />
-          <h3 className="text-lg font-medium text-foreground">No projects yet</h3>
-          <p className="mb-6 mt-1 text-sm text-muted-foreground">
-            Get started by creating your first project.
-          </p>
-          <CreateProjectButton />
-        </div>
-      )
-    }
+    return (
+      <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-20">
+        <FolderKanban className="mb-4 h-12 w-12 text-muted-foreground" />
+        <h3 className="text-lg font-medium text-foreground">No projects yet</h3>
+        <p className="mb-6 text-sm text-muted-foreground">
+          Get started by creating your first project.
+        </p>
+        <CreateProjectButton />
+      </div>
+    )
+  }
 
-    // Search/Filter empty state (projects exist, but none match the current view/query)
+  if (totalFiltered === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center">
         <p className="text-sm font-medium text-foreground">No projects found</p>
@@ -93,37 +159,39 @@ export function ProjectList({ searchParams }: ProjectListProps) {
     )
   }
 
-  // --- MAIN RENDER ---
+  // --- RENDER ---
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <header className="mt-0 flex items-center justify-between gap-3">
         <p className="font-sans text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-          {projects.length} {view === "archived" ? "archived" : ""} projects
+          {totalFiltered} {view} projects
           {view === "active" && pinnedProjects.length > 0 && ` ● ${pinnedProjects.length} pinned`}
         </p>
         <div className="h-px flex-1 bg-border" />
       </header>
 
-      {/* Pinned Projects Section */}
       {pinnedProjects.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-foreground">Pinned Projects</h2>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {pinnedProjects.map((project: ProjectCardData) => (
+        <section>
+          <h2 className="mb-4 font-sans text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Pinned Projects
+          </h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {pinnedProjects.map((project) => (
               <ProjectCard key={project.id} project={project} />
             ))}
           </div>
         </section>
       )}
 
-      {/* All/Remaining Projects Section */}
       {otherProjects.length > 0 && (
-        <section className="space-y-4">
-          {pinnedProjects.length > 0 && view === "active" && (
-            <h2 className="text-lg font-semibold text-foreground">All Projects</h2>
+        <section>
+          {pinnedProjects.length > 0 && (
+            <h2 className="mb-4 font-sans text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Other Projects
+            </h2>
           )}
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {otherProjects.map((project: ProjectCardData) => (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {otherProjects.map((project) => (
               <ProjectCard key={project.id} project={project} />
             ))}
           </div>

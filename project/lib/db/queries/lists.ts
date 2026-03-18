@@ -1,6 +1,6 @@
 import { eq, asc, and, desc } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { lists, tasks, activityLogs, type NewList } from "@/lib/db/schema"
+import { lists, tasks, activityLogs, projects, type NewList } from "@/lib/db/schema"
 
 /**
  * Get all lists for a project, ordered by position.
@@ -70,6 +70,8 @@ export async function createList(
     metadata: { title: list.title },
   })
 
+  await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId))
+
   return list
 }
 
@@ -92,6 +94,10 @@ export async function updateList(
       entityId: listId,
       metadata: data,
     })
+    await db
+      .update(projects)
+      .set({ updatedAt: new Date() })
+      .where(eq(projects.id, updated.projectId))
   }
   return updated ?? null
 }
@@ -124,6 +130,7 @@ export async function deleteList(listId: string, userId: string, migrationListId
     entityId: listId,
     metadata: { title: list.title, tasksMigrated: !!migrationListId },
   })
+  await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, list.projectId))
 }
 
 /**
@@ -146,6 +153,7 @@ export async function moveList(
       entityId: listId,
       metadata: { title: updated.title, newPosition: position },
     })
+    await db.update(projects).set({ updatedAt: new Date() }).where(eq(projects.id, projectId))
   }
 
   return updated ?? null
