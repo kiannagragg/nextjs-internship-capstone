@@ -1,22 +1,5 @@
 // DONE: Task 3.1 - Design database schema for users, projects, lists, and tasks
-// TODO: Task 3.3 - Set up Drizzle ORM with type-safe schema definitions
-
-/* ============================================
-   Tables (12):
-   - users (synced from Clerk)
-   - projects
-   - projectMembers (RBAC join table)
-   - lists (Kanban columns)
-   - tasks (with completion tracking)
-   - taskAssignees (many-to-many)
-   - labels (project-scoped)
-   - taskLabels (many-to-many)
-   - comments
-   - activityLogs
-   - projectInvitations
-   - notifications
-   ============================================ */
-
+// DONE: Task 3.3 - Set up Drizzle ORM with type-safe schema definitions
 import { relations } from "drizzle-orm"
 import {
   pgTable,
@@ -29,6 +12,7 @@ import {
   jsonb,
   uniqueIndex,
   index,
+  doublePrecision,
 } from "drizzle-orm/pg-core"
 
 /* ==================== ENUMS ==================== */
@@ -63,6 +47,7 @@ export const activityActionEnum = pgEnum("activity_action", [
   "deleted",
   "moved",
   "archived",
+  "unarchived",
   "restored",
   "completed",
   "assigned",
@@ -81,9 +66,12 @@ export const activityEntityTypeEnum = pgEnum("activity_entity_type", [
   "member",
 ])
 
+export const projectVisibilityEnum = pgEnum("project_visibility", ["public", "private"])
+
+export const listTypeEnum = pgEnum("list_type", ["todo", "in_progress", "review", "done", "custom"])
+
 /* ==================== USERS ==================== */
 /* Synced from Clerk via webhook (Task 2.5) */
-
 export const users = pgTable(
   "users",
   {
@@ -117,6 +105,7 @@ export const projects = pgTable(
     color: text("color").default("#2D6EF7").notNull(),
     status: projectStatusEnum("status").default("active").notNull(),
     priority: projectPriorityEnum("priority").default("medium").notNull(),
+    visibility: projectVisibilityEnum("visibility").default("private").notNull(),
     startDate: timestamp("start_date", { withTimezone: true }),
     dueDate: timestamp("due_date", { withTimezone: true }),
     isArchived: boolean("is_archived").default(false).notNull(),
@@ -171,7 +160,9 @@ export const lists = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     color: text("color"),
-    position: integer("position").notNull().default(0),
+    position: doublePrecision("position").notNull().default(0),
+    type: listTypeEnum("type").default("custom").notNull(),
+    isSystem: boolean("is_system").default(false).notNull(),
     createdById: uuid("created_by_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -208,8 +199,9 @@ export const tasks = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     description: text("description"),
-    priority: taskPriorityEnum("priority").default("medium").notNull(),
-    position: integer("position").notNull().default(0),
+    priority: taskPriorityEnum("priority"),
+    position: doublePrecision("position").notNull().default(0),
+    version: integer("version").notNull().default(1),
     isCompleted: boolean("is_completed").default(false).notNull(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     startDate: timestamp("start_date", { withTimezone: true }),
@@ -230,6 +222,30 @@ export const tasks = pgTable(
     index("tasks_created_by_idx").on(table.createdById),
     index("tasks_due_date_idx").on(table.dueDate),
     index("tasks_completed_idx").on(table.projectId, table.isCompleted),
+  ]
+)
+
+/* ==================== TASK ATTACHMENTS ==================== */
+
+export const taskAttachments = pgTable(
+  "task_attachments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    uploadedById: uuid("uploaded_by_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    url: text("url").notNull(),
+    size: integer("size").notNull(), // Size in bytes
+    type: text("type").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("task_attachments_task_idx").on(table.taskId),
+    index("task_attachments_user_idx").on(table.uploadedById),
   ]
 )
 
@@ -335,9 +351,7 @@ export const activityLogs = pgTable(
   "activity_logs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -469,6 +483,18 @@ export const tasksRelations = relations(tasks, ({ one, many }) => ({
   assignees: many(taskAssignees),
   labels: many(taskLabels),
   comments: many(comments),
+  attachments: many(taskAttachments),
+}))
+
+export const taskAttachmentsRelations = relations(taskAttachments, ({ one }) => ({
+  task: one(tasks, {
+    fields: [taskAttachments.taskId],
+    references: [tasks.id],
+  }),
+  uploadedBy: one(users, {
+    fields: [taskAttachments.uploadedById],
+    references: [users.id],
+  }),
 }))
 
 export const taskAssigneesRelations = relations(taskAssignees, ({ one }) => ({
@@ -566,6 +592,9 @@ export type NewLabel = typeof labels.$inferInsert
 
 export type TaskLabel = typeof taskLabels.$inferSelect
 export type NewTaskLabel = typeof taskLabels.$inferInsert
+
+export type TaskAttachment = typeof taskAttachments.$inferSelect
+export type NewTaskAttachment = typeof taskAttachments.$inferInsert
 
 export type Comment = typeof comments.$inferSelect
 export type NewComment = typeof comments.$inferInsert

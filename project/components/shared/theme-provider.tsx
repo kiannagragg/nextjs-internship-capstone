@@ -22,25 +22,29 @@ const initialState: ThemeProviderState = {
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  //replaced usestate with lazy initialization
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("theme") as Theme) || "light"
+  const [theme, setTheme] = useState<Theme>("light") // always "light" on first render
+  const [mounted, setMounted] = useState(false)
+
+  // Sync with localStorage after hydration
+  useEffect(() => {
+    const stored = localStorage.getItem("theme") as Theme
+    if (stored) {
+      // defer setting state to avoid synchronous update warning
+      requestAnimationFrame(() => setTheme(stored))
     }
-    return "light"
-  })
+    requestAnimationFrame(() => setMounted(true))
+  }, [])
 
   useEffect(() => {
     const root = window.document.documentElement
     root.classList.remove("light", "dark")
     root.classList.add(theme)
-    localStorage.setItem("theme", theme)
-  }, [theme])
+    if (mounted) {
+      localStorage.setItem("theme", theme)
+    }
+  }, [theme, mounted])
 
-  const value = {
-    theme,
-    setTheme,
-  }
+  const value = { theme, setTheme }
 
   return <ThemeProviderContext.Provider value={value}>{children}</ThemeProviderContext.Provider>
 }

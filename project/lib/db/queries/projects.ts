@@ -1,4 +1,4 @@
-import { eq, and, desc, asc, count, sql } from "drizzle-orm"
+import { eq, and, desc, asc, count, sql, or, exists, ilike } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   projects,
@@ -7,53 +7,97 @@ import {
   tasks,
   activityLogs,
   users,
+  projectInvitations,
   type NewProject,
 } from "@/lib/db/schema"
+import { logActivity } from "./activity"
 
 /**
  * Get all projects a user is a member of.
- * Includes member count and task stats for the Projects page.
+ * Filters, searches, and sorts directly at the database level using Drizzle.
  */
-export async function getProjectsByUserId(userId: string) {
-  const userProjects = await db.query.projectMembers.findMany({
-    where: eq(projectMembers.userId, userId),
+export async function getProjectsByUserId(
+  userId: string,
+  searchParams?: { query?: string; sort?: string; view?: string; page?: number; limit?: number }
+) {
+  const isArchivedView = searchParams?.view === "archived"
+  const query = searchParams?.query || ""
+  const page = searchParams?.page || 1
+  const limit = searchParams?.limit || 20
+  const offset = (page - 1) * limit
+
+  // Dynamic sorting logic
+  let orderByLogic
+  switch (searchParams?.sort) {
+    case "newest":
+      orderByLogic = desc(projects.createdAt)
+      break
+    case "oldest":
+      orderByLogic = asc(projects.createdAt)
+      break
+    case "desc":
+      orderByLogic = desc(projects.title)
+      break
+    case "asc":
+    default:
+      orderByLogic = asc(projects.title)
+      break
+  }
+
+  // 1. Query the Database (Now with Pagination)
+  const userProjects = await db.query.projects.findMany({
+    limit,
+    offset,
+    where: and(
+      exists(
+        db
+          .select()
+          .from(projectMembers)
+          .where(and(eq(projectMembers.projectId, projects.id), eq(projectMembers.userId, userId)))
+      ),
+      isArchivedView
+        ? eq(projects.isArchived, true)
+        : or(eq(projects.isArchived, false), sql`${projects.isArchived} IS NULL`),
+      query
+        ? or(ilike(projects.title, `%${query}%`), ilike(projects.description, `%${query}%`))
+        : undefined
+    ),
     with: {
-      project: {
-        with: {
-          members: {
-            with: {
-              user: true,
-            },
-          },
-        },
+      members: { with: { user: true } },
+      // Fetch tasks in the same query to avoid N+1 queries!
+      tasks: {
+        columns: { id: true, isCompleted: true },
       },
     },
-    orderBy: desc(projectMembers.joinedAt),
+    orderBy: [orderByLogic],
   })
 
-  // Enrich with task counts
-  const enriched = await Promise.all(
-    userProjects.map(async (pm) => {
-      const [taskStats] = await db
-        .select({
-          total: count(tasks.id),
-          completed: count(sql`CASE WHEN ${tasks.isCompleted} = true THEN 1 END`),
-        })
-        .from(tasks)
-        .where(eq(tasks.projectId, pm.project.id))
+  // 2. Enrich data purely in memory (No extra DB calls!)
+  const enriched = userProjects.map((project) => {
+    const userMembership = project.members.find((m) => m.userId === userId)
 
-      return {
-        ...pm.project,
-        memberRole: pm.role,
-        isPinned: pm.isPinned,
-        members: pm.project.members,
-        _count: {
-          tasks: taskStats?.total ?? 0,
-          completedTasks: taskStats?.completed ?? 0,
-        },
-      }
-    })
-  )
+    // Calculate stats from the already-fetched tasks array
+    const totalTasks = project.tasks.length
+    const completedTasks = project.tasks.filter((t) => t.isCompleted).length
+
+    return {
+      ...project,
+      memberRole: userMembership?.role ?? "viewer",
+      isPinned: userMembership?.isPinned ?? false,
+      members: project.members,
+      _count: {
+        tasks: totalTasks,
+        completedTasks: completedTasks,
+      },
+    }
+  })
+
+  // 3. Surface Pinned projects
+  enriched.sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1
+    if (!a.isPinned && b.isPinned) return 1
+    return 0
+  })
 
   return enriched
 }
@@ -62,9 +106,28 @@ export async function getProjectsByUserId(userId: string) {
  * Get a single project by ID with full details.
  * Used for the Kanban board page.
  */
-export async function getProjectById(projectId: string) {
+export async function getProjectById(projectId: string, userId?: string | null) {
   const project = await db.query.projects.findFirst({
-    where: eq(projects.id, projectId),
+    where: and(
+      // 1. Must match the requested project ID
+      eq(projects.id, projectId),
+
+      // 2. Access Control: Must be public OR user must be a member
+      or(
+        eq(projects.visibility, "public"),
+        userId
+          ? exists(
+              db
+                .select()
+                .from(projectMembers)
+                .where(
+                  and(eq(projectMembers.projectId, projects.id), eq(projectMembers.userId, userId))
+                )
+            )
+          : // If no userId is provided, this condition evaluates to false
+            eq(projects.id, "impossible_condition_to_fail_safely")
+      )
+    ),
     with: {
       createdBy: true,
       members: {
@@ -73,6 +136,18 @@ export async function getProjectById(projectId: string) {
         },
       },
       labels: true,
+      lists: {
+        orderBy: (lists, { asc }) => [asc(lists.position)],
+        with: {
+          tasks: {
+            orderBy: (tasks, { asc }) => [asc(tasks.position)],
+            with: {
+              assignees: { with: { user: true } },
+              labels: { with: { label: true } },
+            },
+          },
+        },
+      },
     },
   })
 
@@ -97,11 +172,18 @@ export async function getUserProjectRole(projectId: string, userId: string) {
  * Create a new project with default lists and admin membership.
  * Wraps everything in a single operation for consistency.
  */
+/**
+ * Create a new project with default lists and admin membership.
+ * Wraps everything in a single operation for consistency.
+ */
 export async function createProject(
-  data: Pick<NewProject, "title" | "description" | "color" | "priority" | "startDate" | "dueDate">,
+  data: Pick<
+    NewProject,
+    "title" | "description" | "color" | "priority" | "visibility" | "startDate" | "dueDate"
+  >,
   creatorId: string
 ) {
-  // Insert the project
+  // 1. Insert the project
   const [project] = await db
     .insert(projects)
     .values({
@@ -110,24 +192,29 @@ export async function createProject(
     })
     .returning()
 
-  // SAFETY CHECK:
   if (!project) {
     throw new Error("Failed to create project. Database returned undefined.")
   }
 
-  // Add creator as admin
+  // 2. Add creator as admin
   await db.insert(projectMembers).values({
     projectId: project.id,
     userId: creatorId,
     role: "admin",
   })
 
-  // Create default lists
+  // 3. Create default SYSTEM lists with specific types
   const defaultLists = [
-    { title: "To Do", position: 0 },
-    { title: "In Progress", position: 1000 },
-    { title: "Review", position: 2000 },
-    { title: "Done", position: 3000 },
+    { title: "To Do", position: 0, color: "#64748B", type: "todo" as const, isSystem: true },
+    {
+      title: "In Progress",
+      position: 1000,
+      color: "#3B82F6",
+      type: "in_progress" as const,
+      isSystem: true,
+    },
+    { title: "Review", position: 2000, color: "#8B5CF6", type: "review" as const, isSystem: true },
+    { title: "Done", position: 3000, color: "#10B981", type: "done" as const, isSystem: true },
   ]
 
   await db.insert(lists).values(
@@ -138,7 +225,7 @@ export async function createProject(
     }))
   )
 
-  // Log activity
+  // 4. Log activity
   await db.insert(activityLogs).values({
     projectId: project.id,
     userId: creatorId,
@@ -149,6 +236,35 @@ export async function createProject(
   })
 
   return project
+}
+
+/**
+ * Create project invitations for emails.
+ * NEW FUNCTION
+ */
+export async function createProjectInvitations(
+  projectId: string,
+  inviterId: string,
+  invites: { email: string; role: "admin" | "contributor" | "viewer" }[]
+) {
+  if (!invites || invites.length === 0) return
+
+  const expirationDate = new Date()
+  expirationDate.setDate(expirationDate.getDate() + 7) // Expires in 7 days
+
+  const inviteRecords = invites.map((invite) => ({
+    projectId,
+    invitedByUserId: inviterId,
+    email: invite.email,
+    role: invite.role,
+    token: crypto.randomUUID(), // Generates unique secure token
+    expiresAt: expirationDate,
+    status: "pending" as const,
+  }))
+
+  await db.insert(projectInvitations).values(inviteRecords)
+
+  // Optional: You could log a single activity for inviting multiple people here
 }
 
 /**
@@ -163,6 +279,7 @@ export async function updateProject(
       | "description"
       | "color"
       | "priority"
+      | "visibility"
       | "status"
       | "startDate"
       | "dueDate"
@@ -184,7 +301,7 @@ export async function updateProject(
       action: "updated",
       entityType: "project",
       entityId: projectId,
-      metadata: data,
+      metadata: { ...data, title: updated.title },
     })
   }
 
@@ -195,15 +312,53 @@ export async function updateProject(
  * Delete a project. CASCADE handles all related data.
  */
 export async function deleteProject(projectId: string, userId: string) {
-  // Log before delete (since cascade will remove the log too if we don't)
+  const [project] = await db
+    .select({ title: projects.title })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+
+  if (!project) throw new Error("Project not found")
+
   await db.delete(projects).where(eq(projects.id, projectId))
+
+  await logActivity({
+    projectId: null,
+    userId,
+    action: "deleted",
+    entityType: "project",
+    entityId: projectId,
+    metadata: { title: project.title },
+  })
 }
 
 /**
  * Archive/unarchive a project.
  */
 export async function archiveProject(projectId: string, isArchived: boolean, userId: string) {
-  return updateProject(projectId, { isArchived }, userId)
+  const [updatedProject] = await db
+    .update(projects)
+    .set({
+      isArchived,
+      updatedAt: new Date(),
+    })
+    .where(eq(projects.id, projectId))
+    .returning()
+
+  if (!updatedProject) throw new Error("Project not found")
+
+  const actionString = isArchived ? "archived" : "unarchived"
+
+  // Replaced 'logActivity' with your standard Drizzle insert
+  await db.insert(activityLogs).values({
+    projectId,
+    userId,
+    action: actionString,
+    entityType: "project",
+    entityId: projectId,
+    metadata: { title: updatedProject.title },
+  })
+
+  return updatedProject
 }
 
 /**

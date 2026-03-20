@@ -1,8 +1,38 @@
 "use client"
 
-import { UserButton } from "@clerk/nextjs"
+import dynamic from "next/dynamic"
+import { ClerkLoading, ClerkLoaded, UserButton } from "@clerk/nextjs"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { Menu, Bell } from "lucide-react"
+
+const ClerkUserButton = dynamic(
+  () =>
+    import("@clerk/nextjs").then((mod) => {
+      const { ClerkLoading, ClerkLoaded, UserButton } = mod
+      return function ClerkUser() {
+        return (
+          <>
+            <ClerkLoading>
+              <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
+            </ClerkLoading>
+            <ClerkLoaded>
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: "h-8 w-8",
+                  },
+                }}
+              />
+            </ClerkLoaded>
+          </>
+        )
+      }
+    }),
+  {
+    ssr: false,
+    loading: () => <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />,
+  }
+)
 
 interface TopNavProps {
   onMenuClick: () => void
@@ -19,25 +49,16 @@ export function TopNav({ onMenuClick }: TopNavProps) {
         <Menu size={20} />
       </button>
 
-      {/* Spacer — pushes right actions to the end */}
       <div className="flex-1" />
 
-      {/* Right actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-4">
         <ThemeToggle />
 
-        <button className="relative rounded-lg p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+        <button className="flex items-center justify-center rounded-lg border border-border bg-card p-3 text-foreground transition-colors hover:bg-accent hover:text-foreground">
           <Bell size={18} />
         </button>
 
-        {/* Clerk UserButton — shows avatar, sign-out, manage account */}
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: "h-8 w-8",
-            },
-          }}
-        />
+        <ClerkUserButton />
       </div>
     </header>
   )

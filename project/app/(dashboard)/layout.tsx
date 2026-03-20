@@ -12,6 +12,7 @@ import type React from "react"
 import { auth, currentUser } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 import { DashboardShell } from "@/components/shared/dashboard-shell"
+import { QueryProvider } from "@/components/providers/query-provider"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { userId } = await auth()
@@ -30,5 +31,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // so the onboarding page itself will handle not redirecting in a loop.
   // This flag is passed down so the shell knows whether to redirect.
 
-  return <DashboardShell onboardingComplete={onboardingComplete}>{children}</DashboardShell>
+  return (
+    <QueryProvider>
+      <DashboardShell onboardingComplete={onboardingComplete}>{children}</DashboardShell>
+    </QueryProvider>
+  )
 }

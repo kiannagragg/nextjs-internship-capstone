@@ -48,13 +48,37 @@ export const useUIStore = create<UIState>((set) => ({
 }))
 */
 
-// Placeholder to prevent import errors
-export const useUIStore = () => {
-  console.log("TODO: Implement UI store with Zustand")
-  return {
-    isCreateProjectModalOpen: false,
-    isCreateTaskModalOpen: false,
-    openCreateProjectModal: () => console.log("TODO: Open create project modal"),
-    closeCreateProjectModal: () => console.log("TODO: Close create project modal"),
-  }
+import { create } from "zustand"
+import { type ProjectCardData } from "@/types"
+
+interface UIState {
+  // Create Modal
+  isCreateProjectModalOpen: boolean
+  openCreateProjectModal: () => void
+  closeCreateProjectModal: () => void
+
+  // Edit Modal
+  isEditProjectModalOpen: boolean
+  editingProject: ProjectCardData | null
+  openEditProjectModal: (project: ProjectCardData) => void
+  closeEditProjectModal: () => void
+
+  isCreateTaskModalOpen: boolean
+  openCreateTaskModal: () => void
+  closeCreateTaskModal: () => void
 }
+
+export const useUIStore = create<UIState>((set) => ({
+  isCreateProjectModalOpen: false,
+  openCreateProjectModal: () => set({ isCreateProjectModalOpen: true }),
+  closeCreateProjectModal: () => set({ isCreateProjectModalOpen: false }),
+
+  isEditProjectModalOpen: false,
+  editingProject: null,
+  openEditProjectModal: (project) => set({ isEditProjectModalOpen: true, editingProject: project }),
+  closeEditProjectModal: () => set({ isEditProjectModalOpen: false, editingProject: null }),
+
+  isCreateTaskModalOpen: false,
+  openCreateTaskModal: () => set({ isCreateTaskModalOpen: true }),
+  closeCreateTaskModal: () => set({ isCreateTaskModalOpen: false }),
+}))

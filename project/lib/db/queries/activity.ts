@@ -1,4 +1,4 @@
-import { eq, desc, and, inArray, gte, sql, count } from "drizzle-orm"
+import { eq, desc, and, inArray, gte, sql, count, or } from "drizzle-orm"
 import { db } from "@/lib/db"
 import { activityLogs, projectMembers, type NewActivityLog } from "@/lib/db/schema"
 
@@ -22,7 +22,6 @@ export async function getActivityByProjectId(projectId: string, limit = 20) {
  * Used on the Dashboard "Recent Activity" section.
  */
 export async function getActivityForUser(userId: string, limit = 20) {
-  // Get all project IDs the user is a member of
   const memberships = await db
     .select({ projectId: projectMembers.projectId })
     .from(projectMembers)
@@ -30,10 +29,19 @@ export async function getActivityForUser(userId: string, limit = 20) {
 
   const projectIds = memberships.map((m) => m.projectId)
 
-  if (projectIds.length === 0) return []
+  const deletedProjectsCondition = and(
+    eq(activityLogs.userId, userId),
+    eq(activityLogs.action, "deleted"),
+    eq(activityLogs.entityType, "project")
+  )
+
+  const whereCondition =
+    projectIds.length > 0
+      ? or(inArray(activityLogs.projectId, projectIds), deletedProjectsCondition)
+      : deletedProjectsCondition
 
   return db.query.activityLogs.findMany({
-    where: inArray(activityLogs.projectId, projectIds),
+    where: whereCondition,
     orderBy: desc(activityLogs.createdAt),
     limit,
     with: {
