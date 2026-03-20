@@ -26,9 +26,10 @@ import {
 } from "@/components/ui/select"
 import { DatePicker } from "@/components/shared/date-picker"
 import { RichTextEditor } from "@/components/shared/rich-text-editor"
+import { AssigneeSelector, AssigneeAvatars } from "@/components/shared/assignee-selector"
 import { TaskComments } from "./task-comments"
 import { getCurrentDbUserAction } from "@/lib/actions/users"
-import { getTaskByIdAction } from "@/lib/actions/tasks"
+import { getTaskByIdAction, assignTaskAction, unassignTaskAction } from "@/lib/actions/tasks"
 import { TaskActivity } from "./task-activity"
 import { useTaskAttachments } from "@/hooks/use-task-attachments"
 
@@ -57,15 +58,14 @@ interface TaskSheetProps {
   isOpen: boolean
   onClose: () => void
   updateTask: (params: { taskId: string; data: any }) => Promise<any>
-  /** From useTasks().saveAttachments — saves metadata to DB after upload */
   saveAttachments: (params: {
     taskId: string
     attachments: { url: string; name: string; size: number; type: string }[]
   }) => Promise<any>
-  /** From useTasks().deleteAttachment */
   deleteAttachment: (params: { attachmentId: string; taskId: string }) => Promise<any>
   isDeletingAttachment?: boolean
   lists?: { id: string; title: string }[]
+  projectId?: string
 }
 
 export function TaskSheet({
@@ -77,10 +77,10 @@ export function TaskSheet({
   deleteAttachment,
   isDeletingAttachment = false,
   lists = [],
+  projectId,
 }: TaskSheetProps) {
   const queryClient = useQueryClient()
 
-  // useUploadThing lives here (client-only), not in useTasks (SSR-safe)
   const {
     addAttachments,
     deleteAttachment: deleteAttachmentFn,
@@ -507,17 +507,30 @@ export function TaskSheet({
                 Assignees <span className="font-normal normal-case">(optional)</span>
               </label>
               <div className="flex items-center gap-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-black text-xs text-white">KG</AvatarFallback>
-                </Avatar>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 rounded-full px-3 text-foreground"
-                  disabled
-                >
-                  <Plus className="mr-1 h-4 w-4 text-foreground" /> Add
-                </Button>
+                {fullTask?.assignees && fullTask.assignees.length > 0 && (
+                  <AssigneeAvatars assignees={fullTask.assignees} max={5} size="md" />
+                )}
+                {projectId && (
+                  <AssigneeSelector
+                    projectId={projectId}
+                    assignedUserIds={fullTask?.assignees?.map((a: any) => a.user.id) ?? []}
+                    onToggle={async (userId: string, isAssigning: boolean) => {
+                      if (isAssigning) {
+                        await assignTaskAction(
+                          { taskId: task.id, assigneeUserId: userId },
+                          task.projectId
+                        )
+                      } else {
+                        await unassignTaskAction(
+                          { taskId: task.id, assigneeUserId: userId },
+                          task.projectId
+                        )
+                      }
+                      queryClient.invalidateQueries({ queryKey: ["task-detail", task.id] })
+                      queryClient.invalidateQueries({ queryKey: ["project-lists", task.projectId] })
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>

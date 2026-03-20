@@ -15,7 +15,6 @@ import {
   Paperclip,
 } from "lucide-react"
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { getTaskActivityLogsAction } from "@/lib/actions/tasks"
 
 interface TaskActivityProps {
@@ -62,10 +61,20 @@ function getActivityDescription(log: any, currentUserId: string) {
       return `${subject} completed this task`
     case "restored":
       return `${subject} uncompleted this task`
-    case "assigned":
-      return `${subject} assigned a user to this task`
-    case "unassigned":
-      return `${subject} removed an assignee`
+    case "assigned": {
+      const assigneeName = metadata.assigneeName || "a user"
+      const isSelfAssign = metadata.assigneeId === currentUserId
+      if (isSelfAssign && isMe) return "You assigned yourself to this task"
+      if (isSelfAssign) return `${subject} assigned themselves to this task`
+      return `${subject} assigned ${assigneeName} to this task`
+    }
+    case "unassigned": {
+      const removedName = metadata.assigneeName || "a user"
+      const isSelfRemove = metadata.assigneeId === currentUserId
+      if (isSelfRemove && isMe) return "You removed yourself from this task"
+      if (isSelfRemove) return `${subject} removed themselves from this task`
+      return `${subject} removed ${removedName} from this task`
+    }
     case "deleted":
       return `${subject} deleted this task`
     case "commented":

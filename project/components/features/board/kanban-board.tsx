@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/core"
 import { SortableContext, horizontalListSortingStrategy, arrayMove } from "@dnd-kit/sortable"
 
+import { createTaskAction, assignTaskAction, unassignTaskAction } from "@/lib/actions/tasks"
 import { useBoardStore } from "@/stores/board-store"
 import { useTasks } from "@/hooks/use-tasks"
 import { useLists } from "@/hooks/use-lists"
@@ -57,7 +58,6 @@ interface KanbanBoardProps {
 
 export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoardProps) {
   useProjectChannel(project.id)
-  console.log("[Debug] useProjectChannel subscribed to:", project.id)
   const projectId = project?.id
 
   // --- HOOKS & STORE ---
@@ -501,8 +501,23 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     return await updateTask(params)
   }
 
-  const handleCreateTask = (listId: string, title: string, priority: string | null) => {
-    createTask({ title, listId, projectId, priority })
+  const handleCreateTask = (
+    listId: string,
+    title: string,
+    priority: string | null,
+    assigneeIds?: string[],
+    dueDate?: Date
+  ) => {
+    const formData = new FormData()
+    formData.append("title", title)
+    formData.append("listId", listId)
+    formData.append("projectId", projectId)
+    if (priority) formData.append("priority", priority)
+    if (dueDate) formData.append("dueDate", dueDate.toISOString())
+    if (assigneeIds && assigneeIds.length > 0) {
+      formData.append("assigneeIds", JSON.stringify(assigneeIds))
+    }
+    createTaskAction(formData)
   }
 
   if (!project) return null
@@ -533,6 +548,17 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
                 isTaskPending={isTaskPending}
                 onTaskClick={setSelectedTask}
                 onTaskDeleteClick={setTaskToDelete}
+                projectId={project.id}
+                onAssignToggle={(taskId: string, userId: string, isAssigning: boolean) => {
+                  if (isAssigning) {
+                    assignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+                  } else {
+                    unassignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+                  }
+                }}
+                onDueDateChange={(taskId, date) => {
+                  updateTask({ taskId, data: { dueDate: date?.toISOString() || null } })
+                }}
               />
             ))}
           </SortableContext>
@@ -638,12 +664,20 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
                 isTaskPending={isTaskPending}
                 onTaskClick={setSelectedTask}
                 onTaskDeleteClick={setTaskToDelete}
+                projectId={project.id}
+                onAssignToggle={(taskId: string, userId: string, isAssigning: boolean) => {
+                  if (isAssigning) {
+                    assignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+                  } else {
+                    unassignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+                  }
+                }}
               />
             </div>
           )}
           {activeDragType === "task" && activeDragTask && (
             <div className="w-[280px] cursor-grabbing text-foreground opacity-80">
-              <TaskCard task={activeDragTask} isOverlay />
+              <TaskCard task={activeDragTask} projectId={activeDragTask.projectId} isOverlay />
             </div>
           )}
         </DragOverlay>
@@ -752,6 +786,7 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
         saveAttachments={saveAttachments}
         deleteAttachment={deleteAttachment}
         isDeletingAttachment={isDeletingAttachment}
+        projectId={projectId}
       />
     </>
   )

@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select"
 import { DatePicker } from "@/components/shared/date-picker"
 import { RichTextEditor } from "@/components/shared/rich-text-editor"
+import { AssigneeSelector, AssigneeAvatars } from "@/components/shared/assignee-selector"
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 B"
@@ -71,6 +72,8 @@ export function CreateTaskModal() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [dueDateError, setDueDateError] = useState<string | null>(null)
+
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([])
 
   // Fetch lists dynamically
   const { data: projectLists = [], isLoading: isLoadingLists } = useQuery({
@@ -123,6 +126,7 @@ export function CreateTaskModal() {
     setLabelInput("")
     setFiles([])
     setDueDateError(null)
+    setAssigneeIds([])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -145,6 +149,7 @@ export function CreateTaskModal() {
     if (startDate) formData.append("startDate", startDate.toISOString())
     if (dueDate) formData.append("dueDate", dueDate.toISOString())
     formData.append("labels", JSON.stringify(labels))
+    formData.append("assigneeIds", JSON.stringify(assigneeIds))
 
     // Pass files separately — hook uploads them via uploadthing first
     createGlobalTask.mutate(
@@ -215,6 +220,7 @@ export function CreateTaskModal() {
                 onValueChange={(value) => {
                   setProjectId(value)
                   setListId("")
+                  setAssigneeIds([])
                 }}
                 disabled={isLoadingProjects || isBusy}
               >
@@ -326,6 +332,44 @@ export function CreateTaskModal() {
               placeholder="Type a label and press Enter..."
               disabled={isBusy}
             />
+          </div>
+
+          {/* Assignees */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Assignees</label>
+            <div className="flex items-center gap-2">
+              {assigneeIds.length > 0 && (
+                <div className="flex -space-x-1.5">
+                  {assigneeIds.map((id) => (
+                    <div
+                      key={id}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-foreground text-xs font-bold text-background"
+                    >
+                      {id.slice(0, 2).toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {projectId && (
+                <AssigneeSelector
+                  projectId={projectId}
+                  assignedUserIds={assigneeIds}
+                  onToggle={(userId: string, isAssigning: boolean) => {
+                    if (isAssigning) {
+                      setAssigneeIds((prev) => [...prev, userId])
+                    } else {
+                      setAssigneeIds((prev) => prev.filter((id) => id !== userId))
+                    }
+                  }}
+                  disabled={isBusy}
+                />
+              )}
+            </div>
+            {!projectId && (
+              <p className="text-xs text-muted-foreground">
+                Select a project first to assign members
+              </p>
+            )}
           </div>
 
           {/* Attachments */}

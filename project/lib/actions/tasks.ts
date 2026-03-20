@@ -74,6 +74,26 @@ export async function createTaskAction(data: unknown) {
       createdBy: userId,
     })
 
+    const assigneeIdsString = data.get("assigneeIds") as string
+    if (assigneeIdsString) {
+      try {
+        const assigneeIds = JSON.parse(assigneeIdsString)
+        if (Array.isArray(assigneeIds) && assigneeIds.length > 0) {
+          for (const assigneeUserId of assigneeIds) {
+            await assignTask(task.id, assigneeUserId, userId)
+          }
+
+          for (const assigneeUserId of assigneeIds) {
+            await broadcastToProject(projectId, PUSHER_EVENTS.TASK_ASSIGNED, {
+              taskId: task.id,
+              assigneeId: assigneeUserId,
+              assignedBy: userId,
+            })
+          }
+        }
+      } catch (parseError) {}
+    }
+
     revalidatePath(`/projects/${projectId}`)
     return { success: true, data: task }
   } catch (error) {
