@@ -1,9 +1,9 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { ClerkLoading, ClerkLoaded, UserButton } from "@clerk/nextjs"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
-import { Menu, Bell } from "lucide-react"
+import { Menu } from "lucide-react"
+import { NotificationBell } from "../features/notifications/notification-bell"
 
 const ClerkUserButton = dynamic(
   () =>
@@ -53,10 +53,7 @@ export function TopNav({ onMenuClick }: TopNavProps) {
 
       <div className="flex items-center gap-4">
         <ThemeToggle />
-
-        <button className="flex items-center justify-center rounded-lg border border-border bg-card p-3 text-foreground transition-colors hover:bg-accent hover:text-foreground">
-          <Bell size={18} />
-        </button>
+        <NotificationBell />
 
         <ClerkUserButton />
       </div>

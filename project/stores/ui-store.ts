@@ -66,6 +66,11 @@ interface UIState {
   isCreateTaskModalOpen: boolean
   openCreateTaskModal: () => void
   closeCreateTaskModal: () => void
+
+  isInviteMemberModalOpen: boolean
+  inviteProjectId: string | null
+  openInviteMemberModal: (projectId: string) => void
+  closeInviteMemberModal: () => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -81,4 +86,10 @@ export const useUIStore = create<UIState>((set) => ({
   isCreateTaskModalOpen: false,
   openCreateTaskModal: () => set({ isCreateTaskModalOpen: true }),
   closeCreateTaskModal: () => set({ isCreateTaskModalOpen: false }),
+
+  isInviteMemberModalOpen: false,
+  inviteProjectId: null,
+  openInviteMemberModal: (projectId) =>
+    set({ isInviteMemberModalOpen: true, inviteProjectId: projectId }),
+  closeInviteMemberModal: () => set({ isInviteMemberModalOpen: false, inviteProjectId: null }),
 }))

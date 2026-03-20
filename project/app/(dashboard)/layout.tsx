@@ -13,6 +13,7 @@ import { auth, currentUser } from "@clerk/nextjs/server"
 import { redirect } from "next/navigation"
 import { DashboardShell } from "@/components/shared/dashboard-shell"
 import { QueryProvider } from "@/components/providers/query-provider"
+import { PusherProvider } from "@/components/providers/pusher-provider"
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { userId } = await auth()
@@ -33,7 +34,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <QueryProvider>
-      <DashboardShell onboardingComplete={onboardingComplete}>{children}</DashboardShell>
+      <PusherProvider>
+        <DashboardShell onboardingComplete={onboardingComplete}>{children}</DashboardShell>
+      </PusherProvider>
     </QueryProvider>
   )
 }

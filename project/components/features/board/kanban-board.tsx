@@ -45,6 +45,7 @@ import {
 import { ListColumn } from "./list-column"
 import { TaskCard } from "@/components/features/tasks/task-card"
 import { TaskSheet } from "../tasks/task-sheet"
+import { useProjectChannel } from "@/hooks/use-project-channel"
 
 const PRESET_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#64748B"]
 
@@ -55,6 +56,7 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoardProps) {
+  useProjectChannel(project.id)
   const projectId = project?.id
 
   // --- HOOKS & STORE ---

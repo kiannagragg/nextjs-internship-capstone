@@ -15,6 +15,7 @@ import { TopNav } from "@/components/shared/top-nav"
 import { CreateProjectModal } from "../modals/create-project-modal"
 import { EditProjectModal } from "@/components/modals/edit-project-modal"
 import { CreateTaskModal } from "../modals/create-task-modal"
+import { InviteMemberModal } from "../modals/invite-member-modal"
 
 interface DashboardShellProps {
   children: React.ReactNode
@@ -60,6 +61,7 @@ export function DashboardShell({ children, onboardingComplete }: DashboardShellP
         <CreateProjectModal />
         <EditProjectModal />
         <CreateTaskModal />
+        <InviteMemberModal />
       </div>
     </div>
   )

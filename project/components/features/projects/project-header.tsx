@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/alert-dialog"
 
 import { useProjectHeaderLogic } from "@/hooks/use-project-header"
+import { useUIStore } from "@/stores/ui-store"
 
 // --- Helpers ---
 function getInitials(firstName?: string | null, lastName?: string | null) {
@@ -77,6 +78,7 @@ const PRIORITY_STYLES = {
 export function ProjectHeader({ project, isPinned }: any) {
   const { state, setters, handlers, viewData } = useProjectHeaderLogic(project, isPinned)
   const { progressData, updatedText, dueDateText, showCompletionPrompt } = viewData
+  const { openInviteMemberModal } = useUIStore()
 
   const router = useRouter()
   const pathname = usePathname()
@@ -251,56 +253,20 @@ export function ProjectHeader({ project, isPinned }: any) {
                   {getInitials(member.user?.firstName, member.user?.lastName)}
                 </div>
               ))}
+              {project.members?.length > 5 && (
+                <div className="relative z-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-muted text-xs font-medium text-muted-foreground">
+                  +{project.members.length - 5}
+                </div>
+              )}
             </div>
 
-            <Dialog open={state.isAddMemberOpen} onOpenChange={setters.setIsAddMemberOpen}>
-              <DialogTrigger asChild>
-                <button
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground transition-colors hover:border-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Add Member"
-                >
-                  <Plus size={16} />
-                </button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-foreground">Add Team Member</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label className="text-foreground" htmlFor="email">
-                      Email address
-                    </Label>
-                    <Input className="text-foreground" id="email" placeholder="name@example.com" />
-                  </div>
-                  <div className="grid gap-2 text-foreground">
-                    <Label className="text-foreground" htmlFor="role">
-                      Role
-                    </Label>
-                    <Select defaultValue="contributor">
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a role" />
-                      </SelectTrigger>
-                      <SelectContent className="text-foreground">
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="contributor">Contributor</SelectItem>
-                        <SelectItem value="viewer">Viewer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    className="text-foreground"
-                    variant="outline"
-                    onClick={() => setters.setIsAddMemberOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={handlers.handleInviteMember}>Send Invite</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <button
+              onClick={() => openInviteMemberModal(project.id)}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground transition-colors hover:border-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Invite Member"
+            >
+              <Plus size={16} />
+            </button>
           </div>
 
           <div className="hidden h-6 w-px bg-border lg:block" />
