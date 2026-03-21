@@ -18,6 +18,8 @@ export async function getCurrentDbUserAction() {
         firstName: user.firstName,
         lastName: user.lastName,
         imageUrl: user.imageUrl,
+        email: user.email,
+        role: user.role,
       },
     }
   } catch (error) {

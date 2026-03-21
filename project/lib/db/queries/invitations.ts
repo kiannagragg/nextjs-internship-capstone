@@ -17,6 +17,7 @@ import {
   users,
 } from "@/lib/db/schema"
 import { getUserByEmail } from "./users"
+import { isNotificationEnabled } from "./settings"
 
 /* ==================== CREATE ==================== */
 
@@ -74,14 +75,17 @@ export async function createInvitation(
   // 4. Create notification for the invitee (if they exist in the system)
   const invitee = await getUserByEmail(email)
   if (invitee) {
-    await db.insert(notifications).values({
-      userId: invitee.id,
-      type: "invitation",
-      title: "Project Invitation",
-      message: `${inviterName} invited you to join "${projectTitle}" as a ${role}.`,
-      actionUrl: `/invitations/${token}`,
-      metadata: { projectId, role, token, invitedByUserId },
-    })
+    const shouldNotify = await isNotificationEnabled(invitee.id, "invitationReceived")
+    if (shouldNotify) {
+      await db.insert(notifications).values({
+        userId: invitee.id,
+        type: "invitation",
+        title: "Project Invitation",
+        message: `${inviterName} invited you to join "${projectTitle}" as a ${role}.`,
+        actionUrl: `/invitations/${token}`,
+        metadata: { projectId, role, token, invitedByUserId },
+      })
+    }
   }
 
   // 5. Log activity
@@ -313,14 +317,17 @@ export async function acceptInvitation(invitationId: string, userId: string, use
   const accepterName =
     [acceptingUser?.firstName, acceptingUser?.lastName].filter(Boolean).join(" ") || "A user"
 
-  await db.insert(notifications).values({
-    userId: invitation.invitedByUserId,
-    type: "invitation",
-    title: "Invitation Accepted",
-    message: `${accepterName} accepted your invitation to "${invitation.project.title}".`,
-    actionUrl: `/projects/${invitation.projectId}`,
-    metadata: { projectId: invitation.projectId, acceptedByUserId: userId },
-  })
+  const shouldNotifyAccept = await isNotificationEnabled(invitation.invitedByUserId, "memberJoined")
+  if (shouldNotifyAccept) {
+    await db.insert(notifications).values({
+      userId: invitation.invitedByUserId,
+      type: "invitation",
+      title: "Invitation Accepted",
+      message: `${accepterName} accepted your invitation to "${invitation.project.title}".`,
+      actionUrl: `/projects/${invitation.projectId}`,
+      metadata: { projectId: invitation.projectId, acceptedByUserId: userId },
+    })
+  }
 
   return { success: true as const, projectId: invitation.projectId }
 }
@@ -360,14 +367,20 @@ export async function declineInvitation(invitationId: string, userId: string, us
   const declinerName =
     [decliningUser?.firstName, decliningUser?.lastName].filter(Boolean).join(" ") || "A user"
 
-  await db.insert(notifications).values({
-    userId: invitation.invitedByUserId,
-    type: "invitation",
-    title: "Invitation Declined",
-    message: `${declinerName} declined your invitation to "${invitation.project.title}".`,
-    actionUrl: `/projects/${invitation.projectId}`,
-    metadata: { projectId: invitation.projectId, declinedByUserId: userId },
-  })
+  const shouldNotifyDecline = await isNotificationEnabled(
+    invitation.invitedByUserId,
+    "memberJoined"
+  )
+  if (shouldNotifyDecline) {
+    await db.insert(notifications).values({
+      userId: invitation.invitedByUserId,
+      type: "invitation",
+      title: "Invitation Declined",
+      message: `${declinerName} declined your invitation to "${invitation.project.title}".`,
+      actionUrl: `/projects/${invitation.projectId}`,
+      metadata: { projectId: invitation.projectId, declinedByUserId: userId },
+    })
+  }
 
   return { success: true as const }
 }

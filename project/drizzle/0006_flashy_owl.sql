@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "preferences" jsonb DEFAULT '{"notifications":{"taskAssigned":true,"taskCompleted":true,"taskCommented":true,"projectUpdated":true,"memberJoined":true,"invitationReceived":true},"appearance":{"theme":"system","language":"en"}}'::jsonb;

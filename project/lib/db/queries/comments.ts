@@ -1,6 +1,15 @@
-import { eq, asc } from "drizzle-orm"
+import { eq, asc, and } from "drizzle-orm"
 import { db } from "@/lib/db"
-import { comments, tasks, activityLogs } from "@/lib/db/schema"
+import {
+  comments,
+  tasks,
+  activityLogs,
+  taskAssignees,
+  notifications,
+  users,
+  projects,
+} from "@/lib/db/schema"
+import { isNotificationEnabled } from "./settings"
 
 /**
  * Get all comments for a task, ordered by creation date.
@@ -57,6 +66,49 @@ export async function createComment(taskId: string, userId: string, content: str
       preview: content.slice(0, 100),
     },
   })
+
+  const assignees = await db
+    .select({ userId: taskAssignees.userId })
+    .from(taskAssignees)
+    .where(eq(taskAssignees.taskId, taskId))
+
+  const assigneeIds = assignees.map((a) => a.userId).filter((id) => id !== userId) // Skip the commenter
+
+  if (assigneeIds.length > 0) {
+    const [commenter] = await db
+      .select({ firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    const [project] = await db
+      .select({ title: projects.title })
+      .from(projects)
+      .where(eq(projects.id, task.projectId))
+      .limit(1)
+
+    const commenterName =
+      [commenter?.firstName, commenter?.lastName].filter(Boolean).join(" ") || "Someone"
+
+    for (const assigneeId of assigneeIds) {
+      const shouldNotify = await isNotificationEnabled(assigneeId, "taskCommented")
+      if (shouldNotify) {
+        await db.insert(notifications).values({
+          userId: assigneeId,
+          type: "comment_added",
+          title: "New Comment",
+          message: `${commenterName} commented on "${task.title}" in ${project?.title || "a project"}.`,
+          actionUrl: `/projects/${task.projectId}?taskId=${taskId}`,
+          metadata: {
+            projectId: task.projectId,
+            taskId,
+            commentId: comment.id,
+            commentedBy: userId,
+          },
+        })
+      }
+    }
+  }
 
   return comment
 }

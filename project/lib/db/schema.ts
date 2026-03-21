@@ -70,6 +70,39 @@ export const projectVisibilityEnum = pgEnum("project_visibility", ["public", "pr
 
 export const listTypeEnum = pgEnum("list_type", ["todo", "in_progress", "review", "done", "custom"])
 
+/* ==================== TYPE DEFINITION ==================== */
+export type NotificationPreferences = {
+  taskAssigned: boolean
+  taskCompleted: boolean
+  taskCommented: boolean
+  projectUpdated: boolean
+  memberJoined: boolean
+  invitationReceived: boolean
+}
+
+export type UserPreferences = {
+  notifications: NotificationPreferences
+  appearance: {
+    theme: "light" | "dark" | "system"
+    language: string
+  }
+}
+
+export const DEFAULT_USER_PREFERENCES: UserPreferences = {
+  notifications: {
+    taskAssigned: true,
+    taskCompleted: true,
+    taskCommented: true,
+    projectUpdated: true,
+    memberJoined: true,
+    invitationReceived: true,
+  },
+  appearance: {
+    theme: "system",
+    language: "en",
+  },
+}
+
 /* ==================== USERS ==================== */
 /* Synced from Clerk via webhook (Task 2.5) */
 export const users = pgTable(
@@ -82,6 +115,7 @@ export const users = pgTable(
     lastName: text("last_name"),
     imageUrl: text("image_url"),
     role: text("role"), // Professional role (Developer, Designer, etc.) — NOT RBAC
+    preferences: jsonb("preferences").$type<UserPreferences>().default(DEFAULT_USER_PREFERENCES),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()

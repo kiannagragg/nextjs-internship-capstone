@@ -24,6 +24,7 @@ import {
   activityLogs,
   notifications,
 } from "@/lib/db/schema"
+import { isNotificationEnabled } from "./settings"
 
 /* ==================== LIST MEMBERS ==================== */
 
@@ -156,14 +157,17 @@ export async function updateMemberRole(
   const projectTitle = project?.title ?? "a project"
 
   // 6. Notify the affected user
-  await db.insert(notifications).values({
-    userId: targetUserId,
-    type: "project_updated",
-    title: "Role Updated",
-    message: `Your role in "${projectTitle}" has been changed from ${currentRole} to ${newRole}.`,
-    actionUrl: `/projects/${projectId}`,
-    metadata: { projectId, oldRole: currentRole, newRole },
-  })
+  const shouldNotifyRole = await isNotificationEnabled(targetUserId, "memberJoined")
+  if (shouldNotifyRole) {
+    await db.insert(notifications).values({
+      userId: targetUserId,
+      type: "project_updated",
+      title: "Role Updated",
+      message: `Your role in "${projectTitle}" has been changed from ${currentRole} to ${newRole}.`,
+      actionUrl: `/projects/${projectId}`,
+      metadata: { projectId, oldRole: currentRole, newRole },
+    })
+  }
 
   // 7. Log activity
   const [targetUser] = await db
@@ -243,14 +247,17 @@ export async function removeMember(
     .where(and(eq(projectMembers.projectId, projectId), eq(projectMembers.userId, targetUserId)))
 
   // 5. Notify the removed user
-  await db.insert(notifications).values({
-    userId: targetUserId,
-    type: "project_updated",
-    title: "Removed from Project",
-    message: `You have been removed from "${projectTitle}".`,
-    actionUrl: "/projects",
-    metadata: { projectId },
-  })
+  const shouldNotifyRemoval = await isNotificationEnabled(targetUserId, "memberJoined")
+  if (shouldNotifyRemoval) {
+    await db.insert(notifications).values({
+      userId: targetUserId,
+      type: "project_updated",
+      title: "Removed from Project",
+      message: `You have been removed from "${projectTitle}".`,
+      actionUrl: "/projects",
+      metadata: { projectId },
+    })
+  }
 
   // 6. Log activity
   await db.insert(activityLogs).values({

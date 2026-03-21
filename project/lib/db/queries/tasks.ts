@@ -13,6 +13,7 @@ import {
   users,
   type NewTask,
 } from "@/lib/db/schema"
+import { isNotificationEnabled } from "./settings"
 
 // Define a type for incoming UploadThing attachments
 type AttachmentInput = { url: string; name: string; size?: number; type?: string }
@@ -563,14 +564,17 @@ export async function assignTask(taskId: string, assigneeUserId: string, assigne
       const assignerName =
         [assigner?.firstName, assigner?.lastName].filter(Boolean).join(" ") || "Someone"
 
-      await db.insert(notifications).values({
-        userId: assigneeUserId,
-        type: "task_assigned",
-        title: "Task Assigned",
-        message: `${assignerName} assigned you to "${task.title}" in ${project?.title || "a project"}.`,
-        actionUrl: `/projects/${task.projectId}?taskId=${taskId}`,
-        metadata: { projectId: task.projectId, taskId, assignedBy: assignedByUserId },
-      })
+      const shouldNotify = await isNotificationEnabled(assigneeUserId, "taskAssigned")
+      if (shouldNotify) {
+        await db.insert(notifications).values({
+          userId: assigneeUserId,
+          type: "task_assigned",
+          title: "Task Assigned",
+          message: `${assignerName} assigned you to "${task.title}" in ${project?.title || "a project"}.`,
+          actionUrl: `/projects/${task.projectId}?taskId=${taskId}`,
+          metadata: { projectId: task.projectId, taskId, assignedBy: assignedByUserId },
+        })
+      }
     }
   }
 
@@ -636,17 +640,19 @@ export async function unassignTask(
     const removerName =
       [remover?.firstName, remover?.lastName].filter(Boolean).join(" ") || "Someone"
 
-    await db.insert(notifications).values({
-      userId: assigneeUserId,
-      type: "task_assigned",
-      title: "Task Unassigned",
-      message: `${removerName} removed you from "${task.title}" in ${project?.title || "a project"}.`,
-      actionUrl: `/projects/${task.projectId}?taskId=${taskId}`,
-      metadata: { projectId: task.projectId, taskId, removedBy: removedByUserId },
-    })
+    const shouldNotify = await isNotificationEnabled(assigneeUserId, "taskAssigned")
+    if (shouldNotify) {
+      await db.insert(notifications).values({
+        userId: assigneeUserId,
+        type: "task_assigned",
+        title: "Task Unassigned",
+        message: `${removerName} removed you from "${task.title}" in ${project?.title || "a project"}.`,
+        actionUrl: `/projects/${task.projectId}?taskId=${taskId}`,
+        metadata: { projectId: task.projectId, taskId, removedBy: removedByUserId },
+      })
+    }
   }
 }
-
 /**
  * Reorder tasks within a list (batch position update).
  */

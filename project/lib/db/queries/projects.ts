@@ -8,9 +8,11 @@ import {
   activityLogs,
   users,
   projectInvitations,
+  notifications,
   type NewProject,
 } from "@/lib/db/schema"
 import { logActivity } from "./activity"
+import { isNotificationEnabled } from "./settings"
 
 /**
  * Get all projects a user is a member of.
@@ -303,11 +305,38 @@ export async function updateProject(
       entityId: projectId,
       metadata: { ...data, title: updated.title },
     })
+    const members = await db
+      .select({ userId: projectMembers.userId })
+      .from(projectMembers)
+      .where(eq(projectMembers.projectId, projectId))
+
+    const [updater] = await db
+      .select({ firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1)
+
+    const updaterName =
+      [updater?.firstName, updater?.lastName].filter(Boolean).join(" ") || "Someone"
+
+    for (const member of members) {
+      if (member.userId === userId) continue
+      const shouldNotify = await isNotificationEnabled(member.userId, "projectUpdated")
+      if (shouldNotify) {
+        await db.insert(notifications).values({
+          userId: member.userId,
+          type: "project_updated",
+          title: "Project Updated",
+          message: `${updaterName} updated "${updated.title}".`,
+          actionUrl: `/projects/${projectId}`,
+          metadata: { projectId, updatedBy: userId, fields: Object.keys(data) },
+        })
+      }
+    }
   }
 
   return updated ?? null
 }
-
 /**
  * Delete a project. CASCADE handles all related data.
  */
