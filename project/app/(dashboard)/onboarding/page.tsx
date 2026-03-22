@@ -13,7 +13,17 @@ import { useState, useEffect } from "react"
 import { useUser } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 
-const roles = ["Project Manager", "Developer", "Designer", "QA", "DevOps", "Stakeholder"] as const
+const roles = [
+  "Project Manager",
+  "Developer",
+  "Designer",
+  "QA Engineer",
+  "DevOps Engineer",
+  "Data Analyst",
+  "Product Owner",
+  "Scrum Master",
+  "Other",
+] as const
 
 function OnboardingForm({ user }: { user: NonNullable<ReturnType<typeof useUser>["user"]> }) {
   const [firstName, setFirstName] = useState(user.firstName ?? "")

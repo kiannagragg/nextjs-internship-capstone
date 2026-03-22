@@ -4,6 +4,7 @@ import dynamic from "next/dynamic"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { Menu } from "lucide-react"
 import { useTheme } from "@/components/shared/theme-provider"
+import { useUIStore } from "@/stores/ui-store"
 import { dark } from "@clerk/themes"
 
 const ClerkUserButton = dynamic(
@@ -117,19 +118,15 @@ const NotificationBell = dynamic(
   { ssr: false }
 )
 
-interface TopNavProps {
-  onMenuClick: () => void
-}
-
-export function TopNav({ onMenuClick }: TopNavProps) {
-  // Grab the theme from the provider
+export function TopNav() {
   const { theme } = useTheme()
+  const { openSidebar } = useUIStore()
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6">
       {/* Hamburger — mobile only */}
       <button
-        onClick={onMenuClick}
+        onClick={openSidebar}
         className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent lg:hidden"
       >
         <Menu size={20} />

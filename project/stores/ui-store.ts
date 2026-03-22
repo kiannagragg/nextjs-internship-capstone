@@ -52,12 +52,17 @@ import { create } from "zustand"
 import { type ProjectCardData } from "@/types"
 
 interface UIState {
-  // Create Modal
+  // Sidebar States
+  isSidebarOpen: boolean
+  openSidebar: () => void
+  closeSidebar: () => void
+  toggleSidebar: () => void
+
+  // Modal States
   isCreateProjectModalOpen: boolean
   openCreateProjectModal: () => void
   closeCreateProjectModal: () => void
 
-  // Edit Modal
   isEditProjectModalOpen: boolean
   editingProject: ProjectCardData | null
   openEditProjectModal: (project: ProjectCardData) => void
@@ -77,9 +82,18 @@ interface UIState {
   calendarDefaultDate: Date | null
   openCalendarEventModal: (defaultDate?: Date, event?: any) => void
   closeCalendarEventModal: () => void
+
+  // --- Theme State ---
+  theme: "light" | "dark"
+  setTheme: (theme: "light" | "dark") => void
 }
 
 export const useUIStore = create<UIState>((set) => ({
+  isSidebarOpen: false,
+  openSidebar: () => set({ isSidebarOpen: true }),
+  closeSidebar: () => set({ isSidebarOpen: false }),
+  toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
+
   isCreateProjectModalOpen: false,
   openCreateProjectModal: () => set({ isCreateProjectModalOpen: true }),
   closeCreateProjectModal: () => set({ isCreateProjectModalOpen: false }),
@@ -114,4 +128,7 @@ export const useUIStore = create<UIState>((set) => ({
       calendarEditingEvent: null,
       calendarDefaultDate: null,
     }),
+
+  theme: "light",
+  setTheme: (theme) => set({ theme }),
 }))
