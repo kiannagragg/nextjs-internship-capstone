@@ -30,6 +30,8 @@ interface TaskCardProps {
   onAssignToggle?: (taskId: string, userId: string, isAssigning: boolean) => void
   onDueDateChange?: (taskId: string, date: Date | undefined) => void
   isOverlay?: boolean
+  isSelected?: boolean
+  onSelect?: (taskId: string, multi: boolean) => void
 }
 
 export function TaskCard({
@@ -40,6 +42,8 @@ export function TaskCard({
   onAssignToggle,
   onDueDateChange,
   isOverlay,
+  isSelected,
+  onSelect,
 }: TaskCardProps) {
   const { toast } = useToast()
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
@@ -96,6 +100,17 @@ export function TaskCard({
     return "text-muted-foreground bg-secondary/50"
   }
 
+  const handleClick = (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey) {
+      e.stopPropagation()
+      onSelect?.(task.id, true)
+      return
+    }
+    // If they hold Shift, add range selection later!
+
+    onClick?.(task)
+  }
+
   const handleCopyLink = (e: React.MouseEvent) => {
     e.stopPropagation()
     const url = `${window.location.origin}/projects/${task.projectId}?taskId=${task.id}`
@@ -135,10 +150,12 @@ export function TaskCard({
       style={style}
       {...attributes}
       {...listeners}
-      onClick={() => onClick?.(task)}
-      className={`group relative mb-2 flex cursor-pointer flex-col gap-3 rounded-md border border-muted-foreground/20 bg-card p-3 shadow-sm transition-all hover:ring-1 hover:ring-primary ${
-        task.isCompleted ? "opacity-60" : "opacity-100"
-      }`}
+      onClick={handleClick}
+      className={`group relative mb-2 flex cursor-pointer flex-col gap-3 rounded-md border p-3 shadow-sm transition-all hover:ring-1 hover:ring-primary ${
+        isSelected
+          ? "border-primary bg-primary/5 ring-1 ring-primary"
+          : "border-muted-foreground/20 bg-card"
+      } ${task.isCompleted ? "opacity-60" : "opacity-100"}`}
     >
       {/* Top Row: Title & Actions */}
       <div className="flex items-start justify-between gap-2">

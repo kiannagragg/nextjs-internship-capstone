@@ -3,7 +3,7 @@
 import { useMemo, useState, useRef, useEffect } from "react"
 import { useSortable, SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { Plus, MoreHorizontal, Loader2, Trash2, Edit2, Lock, Calendar } from "lucide-react"
+import { Plus, MoreHorizontal, Loader2, Trash2, Edit2, Lock } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -52,6 +52,8 @@ interface ListColumnProps {
   projectId: string
   onAssignToggle?: (taskId: string, userId: string, isAssigning: boolean) => void
   onDueDateChange?: (taskId: string, date: Date | undefined) => void
+  selectedTaskIds?: string[]
+  onSelectTask?: (taskId: string, multi: boolean) => void
 }
 
 export function ListColumn({
@@ -70,6 +72,8 @@ export function ListColumn({
   projectId,
   onAssignToggle,
   onDueDateChange,
+  selectedTaskIds = [],
+  onSelectTask,
 }: ListColumnProps) {
   // --- DND-KIT HOOK ---
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
@@ -165,7 +169,6 @@ export function ListColumn({
           onSubmit={handleSaveEdit}
           className="rounded-t-xl border-b bg-background p-3 shadow-sm"
         >
-          {/* Your exact editing form from previous code */}
           <Input
             autoFocus
             value={editTitle}
@@ -213,7 +216,6 @@ export function ListColumn({
           </div>
         </form>
       ) : (
-        // DRAG HANDLE 👇
         <div
           {...attributes}
           {...listeners}
@@ -288,6 +290,8 @@ export function ListColumn({
               onDelete={(taskId) => onTaskDeleteClick(taskId)}
               onAssignToggle={onAssignToggle}
               onDueDateChange={onDueDateChange}
+              isSelected={selectedTaskIds.includes(task.id)}
+              onSelect={onSelectTask}
             />
           ))}
         </SortableContext>

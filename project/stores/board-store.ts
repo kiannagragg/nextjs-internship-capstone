@@ -72,6 +72,12 @@ interface BoardState {
   activeDragTask: TaskWithAssignees | null
   activeDragList: ListWithTasks | null
 
+  // Bulk Selection State
+  selectedTaskIds: string[]
+  toggleTaskSelection: (taskId: string, multi: boolean) => void
+  clearTaskSelection: () => void
+  selectAllTasks: (taskIds: string[]) => void
+
   // Actions
   setBoardData: (projectId: string, lists: ListWithTasks[]) => void
   setActiveDragItem: (params: {
@@ -99,6 +105,25 @@ export const useBoardStore = create<BoardState>((set) => ({
   activeDragType: null,
   activeDragTask: null,
   activeDragList: null,
+
+  selectedTaskIds: [],
+  toggleTaskSelection: (taskId, multi) =>
+    set((state) => {
+      if (!multi) {
+        return {
+          selectedTaskIds:
+            state.selectedTaskIds.includes(taskId) && state.selectedTaskIds.length === 1
+              ? []
+              : [taskId],
+        }
+      }
+      if (state.selectedTaskIds.includes(taskId)) {
+        return { selectedTaskIds: state.selectedTaskIds.filter((id) => id !== taskId) }
+      }
+      return { selectedTaskIds: [...state.selectedTaskIds, taskId] }
+    }),
+  clearTaskSelection: () => set({ selectedTaskIds: [] }),
+  selectAllTasks: (taskIds) => set({ selectedTaskIds: taskIds }),
 
   setBoardData: (projectId, lists) => set({ projectId, lists }),
 

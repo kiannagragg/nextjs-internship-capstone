@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, X, CheckSquare, FolderOutput, UserPlus, Trash2 } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
@@ -42,6 +42,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
 
 import { ListColumn } from "./list-column"
 import { TaskCard } from "@/components/features/tasks/task-card"
@@ -90,6 +98,10 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     activeDragList,
     setActiveDragItem,
     clearActiveDragItem,
+    selectedTaskIds,
+    toggleTaskSelection,
+    clearTaskSelection,
+    selectAllTasks,
   } = useBoardStore()
 
   useEffect(() => {
@@ -121,6 +133,110 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
   const [migrationListId, setMigrationListId] = useState<string>("")
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState<any | null>(null)
+
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false)
+
+  // --- BULK TASK OPERATIONS ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+        e.preventDefault()
+        const allTaskIds = storeLists.flatMap((list) => list.tasks?.map((t) => t.id) || [])
+        selectAllTasks(allTaskIds)
+      }
+
+      if (e.key === "Escape" && selectedTaskIds.length > 0) {
+        clearTaskSelection()
+      }
+
+      if ((e.key === "Backspace" || e.key === "Delete") && selectedTaskIds.length > 0) {
+        e.preventDefault()
+        setIsBulkDeleteOpen(true)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [selectedTaskIds, storeLists, selectAllTasks, clearTaskSelection])
+
+  const handleBulkDelete = async () => {
+    setIsBulkProcessing(true)
+    try {
+      for (const id of selectedTaskIds) {
+        await deleteTask(id)
+      }
+      clearTaskSelection()
+      setIsBulkDeleteOpen(false)
+    } finally {
+      setIsBulkProcessing(false)
+    }
+  }
+
+  const handleBulkMove = async (targetListId: string) => {
+    setIsBulkProcessing(true)
+    try {
+      const newLists = storeLists.map((list) => ({
+        ...list,
+        tasks: list.tasks ? [...list.tasks] : [],
+      }))
+
+      const targetList = newLists.find((l) => l.id === targetListId)
+      if (!targetList) return
+
+      let lastPosition =
+        targetList.tasks.length > 0
+          ? targetList.tasks[targetList.tasks.length - 1]?.position
+          : undefined
+
+      const movePromises = []
+
+      for (const taskId of selectedTaskIds) {
+        const sourceList = newLists.find((l) => l.tasks.some((t) => t.id === taskId))
+
+        if (!sourceList || sourceList.id === targetListId) continue
+
+        const taskToMove = sourceList.tasks.find((t) => t.id === taskId)
+        if (!taskToMove) continue
+
+        const { position: newPosition } = calculateFractionalPosition(lastPosition, undefined)
+        lastPosition = newPosition
+
+        sourceList.tasks = sourceList.tasks.filter((t) => t.id !== taskId)
+        targetList.tasks = [
+          ...targetList.tasks,
+          { ...taskToMove, listId: targetListId, position: newPosition },
+        ].sort((a, b) => a.position - b.position)
+
+        movePromises.push(moveTask({ taskId, listId: targetListId, position: newPosition }))
+      }
+
+      setBoardData(projectId, newLists)
+
+      await Promise.all(movePromises)
+
+      clearTaskSelection()
+    } catch (error) {
+    } finally {
+      setIsBulkProcessing(false)
+    }
+  }
+
+  const handleBulkAssign = async (userId: string) => {
+    setIsBulkProcessing(true)
+    try {
+      for (const taskId of selectedTaskIds) {
+        await assignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+      }
+      clearTaskSelection()
+    } finally {
+      setIsBulkProcessing(false)
+    }
+  }
 
   // --- DND-KIT SETUP ---
   const sensors = useSensors(
@@ -559,6 +675,8 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
                 onDueDateChange={(taskId, date) => {
                   updateTask({ taskId, data: { dueDate: date?.toISOString() || null } })
                 }}
+                selectedTaskIds={selectedTaskIds}
+                onSelectTask={toggleTaskSelection}
               />
             ))}
           </SortableContext>
@@ -682,6 +800,131 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
           )}
         </DragOverlay>
       </DndContext>
+
+      {/* FLOATING BULK ACTIONS TOOLBAR */}
+      {selectedTaskIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-foreground px-6 py-3 text-background shadow-2xl animate-in slide-in-from-bottom-5">
+          <div className="flex items-center gap-2 border-r border-background/20 pr-4 text-sm font-medium">
+            {isBulkProcessing ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <CheckSquare size={18} />
+            )}
+            {selectedTaskIds.length} selected
+          </div>
+
+          <div className="flex items-center gap-1">
+            {/* BULK MOVE */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={isBulkProcessing}
+                  className="text-background hover:bg-background/20 hover:text-background"
+                >
+                  <FolderOutput size={16} className="mr-2" />
+                  Move
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-48">
+                <DropdownMenuLabel>Move to list...</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {storeLists.map((list) => (
+                  <DropdownMenuItem
+                    key={list.id}
+                    onClick={() => handleBulkMove(list.id)}
+                    className="cursor-pointer"
+                  >
+                    <div
+                      className="mr-2 h-2 w-2 rounded-full"
+                      style={{ backgroundColor: list.color || "#CCC" }}
+                    />
+                    {list.title}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* BULK ASSIGN */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={isBulkProcessing}
+                  className="text-background hover:bg-background/20 hover:text-background"
+                >
+                  <UserPlus size={16} className="mr-2" />
+                  Assign
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-48">
+                <DropdownMenuLabel>Assign to...</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {project?.members?.map((member: any) => (
+                  <DropdownMenuItem
+                    key={member.userId}
+                    onClick={() => handleBulkAssign(member.userId)}
+                    className="cursor-pointer"
+                  >
+                    {/* Display user name or email */}
+                    {member.user?.firstName
+                      ? `${member.user.firstName} ${member.user.lastName || ""}`
+                      : member.user?.email || "Unknown User"}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <div className="mx-1 h-4 w-px bg-background/20" />
+
+            {/* BULK DELETE */}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={isBulkProcessing}
+              className="text-red-400 hover:bg-red-900/30 hover:text-red-300"
+              onClick={() => setIsBulkDeleteOpen(true)}
+            >
+              <Trash2 size={16} className="mr-2" />
+              Delete
+            </Button>
+          </div>
+
+          {/* CLOSE/CLEAR BUTTON */}
+          <button
+            onClick={clearTaskSelection}
+            disabled={isBulkProcessing}
+            className="ml-2 rounded-full p-1 text-background/70 hover:bg-background/20 hover:text-background disabled:opacity-50"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* NEW: BULK DELETE ALERT */}
+      <AlertDialog open={isBulkDeleteOpen} onOpenChange={setIsBulkDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">
+              Delete {selectedTaskIds.length} Tasks?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
+              Are you sure you want to delete these tasks? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="text-foreground">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              Delete {selectedTaskIds.length} Tasks
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* SMART DELETION / TASK MIGRATION MODAL */}
       <AlertDialog
