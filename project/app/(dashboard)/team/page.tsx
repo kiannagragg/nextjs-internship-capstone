@@ -37,12 +37,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu"
+import { UserAvatar } from "@/components/shared/user-avatar"
 
 /* ==================== HELPERS ==================== */
-
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  return ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U"
-}
 
 function getFullName(user: any) {
   return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Unknown"
@@ -347,9 +344,7 @@ export default function TeamPage() {
                 {/* Top row: avatar + name + menu */}
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-foreground text-sm font-bold text-background">
-                      {getInitials(member.user?.firstName, member.user?.lastName)}
-                    </div>
+                    <UserAvatar user={member.user} size="xl" />
                     <div>
                       <h4 className="font-semibold text-foreground">{getFullName(member.user)}</h4>
                       <p className="text-xs text-muted-foreground">

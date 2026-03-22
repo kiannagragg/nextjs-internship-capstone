@@ -1,24 +1,10 @@
 import Link from "next/link"
 import { requireAuth } from "@/lib/auth"
 import { getRecentProjects } from "@/lib/db/queries/dashboard"
+import { UserAvatar, StackedAvatars } from "@/components/shared/user-avatar"
+import { timeAgo } from "@/lib/utils"
 
 // --- Helper Functions ---
-
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  const first = firstName?.[0] || ""
-  const last = lastName?.[0] || ""
-  return (first + last).toUpperCase() || "U"
-}
-
-function formatTimeAgo(date: Date) {
-  const now = new Date()
-  const diffInSeconds = Math.floor((now.getTime() - new Date(date).getTime()) / 1000)
-
-  if (diffInSeconds < 60) return "Just now"
-  if (diffInSeconds < 3600) return `Last updated ${Math.floor(diffInSeconds / 60)} mins ago`
-  if (diffInSeconds < 86400) return `Last updated ${Math.floor(diffInSeconds / 3600)} hrs ago`
-  return `Last updated ${Math.floor(diffInSeconds / 86400)} days ago`
-}
 
 export async function RecentProjects() {
   const { dbUserId: userId } = await requireAuth()
@@ -74,9 +60,7 @@ export async function RecentProjects() {
                   />
                   <div>
                     <h3 className="text-sm font-semibold text-foreground">{project.title}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {formatTimeAgo(new Date(project.updatedAt))}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{timeAgo(project.updatedAt)}</p>
                   </div>
                 </div>
 
@@ -116,21 +100,12 @@ export async function RecentProjects() {
                   </div>
 
                   {/* Member Avatars (Hidden on small screens) */}
-                  <div className="hidden items-center -space-x-1.5 lg:flex">
-                    {project.members.slice(0, 4).map((member) => (
-                      <div
-                        key={member.user.id}
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-background bg-foreground text-[9px] font-bold text-background ring-1 ring-border"
-                        title={`${member.user.firstName} ${member.user.lastName}`}
-                      >
-                        {getInitials(member.user.firstName, member.user.lastName)}
-                      </div>
-                    ))}
-                    {project.members.length > 4 && (
-                      <div className="bg-surface-hover flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-background text-[9px] font-bold text-muted-foreground ring-1 ring-border">
-                        +{project.members.length - 4}
-                      </div>
-                    )}
+                  <div className="hidden lg:flex">
+                    <StackedAvatars
+                      users={project.members.map((m: any) => ({ user: m.user }))}
+                      max={4}
+                      size="sm"
+                    />
                   </div>
                 </div>
               </Link>

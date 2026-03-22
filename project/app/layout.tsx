@@ -30,6 +30,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <ClerkProvider afterSignOutUrl="/">
       <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${syne.variable}`}>
+        <head>
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('theme');
+                  if (theme === 'dark' || theme === 'light') {
+                    document.documentElement.classList.add(theme);
+                  }
+                } catch(e) {}
+              })();
+            `,
+            }}
+          />
+        </head>
         <body className="font-body">
           <ThemeProvider>{children}</ThemeProvider>
           <Toaster />

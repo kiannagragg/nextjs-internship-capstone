@@ -1,26 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import {
-  User,
-  Bell,
-  Shield,
-  Palette,
-  Loader2,
-  Camera,
-  ExternalLink,
-  Sun,
-  Moon,
-  Monitor,
-  Check,
-} from "lucide-react"
+import { UserProfile } from "@clerk/nextjs"
+import { dark } from "@clerk/themes"
+import { User, Bell, Shield, Palette, Loader2, Sun, Moon, Check } from "lucide-react"
 import { useTheme } from "@/components/shared/theme-provider"
 
 import { useSettings } from "@/hooks/use-settings"
-import { UserAvatar } from "@/components/shared/user-avatar"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import {
   Select,
@@ -36,7 +24,7 @@ const SECTIONS = [
   { id: "profile", label: "Profile", icon: User },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "security", label: "Security", icon: Shield },
+  { id: "security", label: "Account & Security", icon: Shield },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]["id"]
@@ -119,8 +107,6 @@ export default function SettingsPage() {
     isUpdatingAppearance,
   } = useSettings()
 
-  const { setTheme, theme: currentTheme } = useTheme()
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -142,7 +128,7 @@ export default function SettingsPage() {
       {/* Layout: Nav + Content */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[240px_1fr]">
         {/* Navigation */}
-        <nav className="rounded-xl border border-border bg-card p-3">
+        <nav className="h-fit rounded-xl border border-border bg-card p-3">
           <div className="space-y-1">
             {SECTIONS.map((section) => (
               <button
@@ -198,27 +184,25 @@ function ProfileSection({
   onSave: (data: any) => Promise<any>
   isSaving: boolean
 }) {
-  const [firstName, setFirstName] = useState(user?.firstName || "")
-  const [lastName, setLastName] = useState(user?.lastName || "")
-  const [role, setRole] = useState(user?.role || "")
-
-  const [prevUserId, setPrevUserId] = useState(user?.id)
-  if (user?.id !== prevUserId) {
-    setPrevUserId(user?.id)
-    setFirstName(user?.firstName || "")
-    setLastName(user?.lastName || "")
-    setRole(user?.role || "")
+  const extractRole = (u: any) => {
+    if (!u) return ""
+    const rawRole = u.publicMetadata?.role || u.unsafeMetadata?.role || u.role || ""
+    const matchedRole = PROFESSIONAL_ROLES.find((r) => r.toLowerCase() === rawRole.toLowerCase())
+    return matchedRole || rawRole
   }
 
-  const hasChanges =
-    firstName !== (user?.firstName || "") ||
-    lastName !== (user?.lastName || "") ||
-    role !== (user?.role || "")
+  const [role, setRole] = useState(() => extractRole(user))
+  const [prevUserId, setPrevUserId] = useState(user?.id)
+
+  if (user?.id !== prevUserId) {
+    setPrevUserId(user?.id)
+    setRole(extractRole(user))
+  }
+
+  const hasChanges = role !== extractRole(user)
 
   const handleSave = async () => {
     await onSave({
-      firstName: firstName.trim(),
-      lastName: lastName.trim(),
       role: role.trim() || null,
     })
   }
@@ -226,52 +210,8 @@ function ProfileSection({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">Profile</h2>
-        <p className="text-sm text-muted-foreground">Manage your personal information</p>
-      </div>
-
-      {/* Avatar */}
-      <div className="flex items-center gap-4">
-        <UserAvatar user={user} size="2xl" />
-        <div>
-          <p className="text-sm font-medium text-foreground">Profile Photo</p>
-          <p className="text-xs text-muted-foreground">
-            Managed through Clerk. Click your avatar in the top-right to change it.
-          </p>
-        </div>
-      </div>
-
-      {/* Form */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">First Name</label>
-          <Input
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            placeholder="First name"
-            disabled={isSaving}
-            className="text-foreground"
-          />
-        </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-foreground">Last Name</label>
-          <Input
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            placeholder="Last name"
-            disabled={isSaving}
-            className="text-foreground"
-          />
-        </div>
-      </div>
-
-      {/* Email — read-only */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-foreground">Email</label>
-        <Input value={user?.email || ""} disabled className="text-muted-foreground" />
-        <p className="text-xs text-muted-foreground">
-          Email is managed by Clerk and cannot be changed here.
-        </p>
+        <h2 className="text-lg font-semibold text-foreground">App Profile</h2>
+        <p className="text-sm text-muted-foreground">Manage your application-specific details</p>
       </div>
 
       {/* Professional Role */}
@@ -282,7 +222,7 @@ function ProfileSection({
           onValueChange={(val) => setRole(val === "none" ? "" : val)}
           disabled={isSaving}
         >
-          <SelectTrigger className="text-foreground">
+          <SelectTrigger className="text-foreground sm:w-[280px]">
             <SelectValue placeholder="Select your role" />
           </SelectTrigger>
           <SelectContent>
@@ -301,11 +241,7 @@ function ProfileSection({
         <Button
           variant="outline"
           className="text-foreground"
-          onClick={() => {
-            setFirstName(user?.firstName || "")
-            setLastName(user?.lastName || "")
-            setRole(user?.role || "")
-          }}
+          onClick={() => setRole(extractRole(user))}
           disabled={isSaving || !hasChanges}
         >
           Reset
@@ -450,77 +386,108 @@ function AppearanceSection({
             ))}
           </SelectContent>
         </Select>
-        <p className="text-xs text-muted-foreground">
-          Language preference is saved but full internationalization is not yet implemented.
-        </p>
       </div>
     </div>
   )
 }
 
-/* ==================== SECURITY SECTION ==================== */
+/* ==================== SECURITY / ACCOUNT SECTION ==================== */
 
 function SecuritySection() {
+  const { theme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  if (!mounted) {
+    setMounted(true)
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  const isDark = theme === "dark"
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">Security</h2>
+        <h2 className="text-lg font-semibold text-foreground">Account & Security</h2>
         <p className="text-sm text-muted-foreground">
-          Authentication and security settings are managed through Clerk
+          Manage your personal details, password, and active sessions securely.
         </p>
       </div>
 
-      <div className="space-y-4">
-        {[
-          { label: "Password", description: "Change your password or add a new one" },
-          { label: "Two-factor authentication", description: "Add an extra layer of security" },
-          { label: "Email addresses", description: "Manage your email addresses" },
-          { label: "Active sessions", description: "Manage active sessions across devices" },
-        ].map((item) => (
-          <div
-            key={item.label}
-            className="flex items-center justify-between rounded-lg border border-border p-4"
-          >
-            <div>
-              <p className="text-sm font-medium text-foreground">{item.label}</p>
-              <p className="text-xs text-muted-foreground">{item.description}</p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-foreground"
-              onClick={() => {
-                // Open Clerk's user profile modal
-                if (typeof window !== "undefined" && (window as any).Clerk) {
-                  ;(window as any).Clerk.openUserProfile()
+      <style jsx global>{`
+        .dark .cl-rootBox {
+          color: #f5f5f5;
+        }
+        .dark .cl-rootBox h1,
+        .dark .cl-rootBox h2,
+        .dark .cl-rootBox h3 {
+          color: #f5f5f5;
+        }
+        .dark .cl-rootBox p,
+        .dark .cl-rootBox span,
+        .dark .cl-rootBox label {
+          color: #d4d4d4;
+        }
+        .dark .cl-rootBox [class^="cl-internal-"] {
+          color: inherit;
+        }
+      `}</style>
+
+      <div className="flex justify-start rounded-xl">
+        <UserProfile
+          key={`clerk-profile-${theme}`}
+          routing="hash"
+          appearance={{
+            baseTheme: isDark ? dark : undefined,
+            variables: isDark
+              ? {
+                  colorBackground: "#1a1a1a",
+                  colorText: "#f5f5f5",
+                  colorTextSecondary: "#a3a3a3",
+                  colorInputBackground: "#262626",
+                  colorInputText: "#f5f5f5",
+                  colorPrimary: "#3b82f6",
+                  colorDanger: "#ef4444",
+                  colorNeutral: "#d4d4d4",
                 }
-              }}
-            >
-              <ExternalLink className="mr-2 h-3.5 w-3.5" />
-              Manage
-            </Button>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-lg border border-destructive/30 p-4">
-        <h3 className="text-sm font-semibold text-destructive">Danger Zone</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Account deletion is handled through Clerk. This action is permanent.
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-3 border-destructive/30 text-destructive hover:bg-destructive/10"
-          onClick={() => {
-            if (typeof window !== "undefined" && (window as any).Clerk) {
-              ;(window as any).Clerk.openUserProfile()
-            }
+              : undefined,
+            elements: {
+              rootBox: "w-full max-w-none shadow-none",
+              cardBox: "w-full max-w-none shadow-none border-none bg-transparent",
+              navbar: "block",
+              pageScrollBox: "p-4",
+              ...(isDark && {
+                formFieldLabel: { color: "#d4d4d4" },
+                formFieldInput: {
+                  backgroundColor: "#262626",
+                  borderColor: "#404040",
+                  color: "#f5f5f5",
+                },
+                headerTitle: { color: "#f5f5f5" },
+                headerSubtitle: { color: "#a3a3a3" },
+                profileSectionTitle: { color: "#f5f5f5" },
+                profileSectionTitleText: { color: "#f5f5f5" },
+                profileSectionContent: { color: "#d4d4d4" },
+                profileSectionPrimaryButton: { color: "#f5f5f5" },
+                userPreviewMainIdentifier: { color: "#f5f5f5" },
+                userPreviewSecondaryIdentifier: { color: "#f5f5f5" },
+                navbarButton: { color: "#d4d4d4" },
+                navbarButtonActive: { color: "#f5f5f5" },
+                badge: { color: "#d4d4d4", backgroundColor: "#333333" },
+                menuButton: { color: "#d4d4d4" },
+                menuItem: { color: "#d4d4d4" },
+                accordionTriggerButton: { color: "#d4d4d4" },
+                accordionContent: { color: "#d4d4d4" },
+                activeDeviceListItem: { color: "#d4d4d4" },
+                activeDevice: { color: "#d4d4d4" },
+                deviceInfo: { color: "#a3a3a3" },
+              }),
+            },
           }}
-        >
-          <ExternalLink className="mr-2 h-3.5 w-3.5" />
-          Manage Account
-        </Button>
+        />
       </div>
     </div>
   )

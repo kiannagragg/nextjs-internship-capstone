@@ -21,7 +21,7 @@ import { useAnalytics } from "@/hooks/use-analytics"
 import { useTeamMembers } from "@/hooks/use-team-member"
 import { timeAgo } from "@/lib/utils"
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { UserAvatar } from "@/components/shared/user-avatar"
 import {
   Select,
   SelectContent,
@@ -33,10 +33,6 @@ import {
 import type { TimeRange } from "@/lib/db/queries/analytics"
 
 /* ==================== HELPERS ==================== */
-
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  return ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U"
-}
 
 function getFullName(user: any) {
   return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Unknown"
@@ -577,12 +573,8 @@ export default function AnalyticsPage() {
                 <div className="space-y-3">
                   {leaderboard.map((entry: any) => (
                     <div key={entry.userId} className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={entry.user?.imageUrl || ""} />
-                        <AvatarFallback className="bg-foreground text-xs text-background">
-                          {getInitials(entry.user?.firstName, entry.user?.lastName)}
-                        </AvatarFallback>
-                      </Avatar>
+                      {/* Avatar */}
+                      <UserAvatar user={entry.user} size="lg" />
                       <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                         {getFullName(entry.user)}
                       </p>
@@ -630,12 +622,7 @@ export default function AnalyticsPage() {
                 <div className="scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent max-h-[360px] space-y-1 overflow-y-auto pr-2">
                   {filteredActivity.map((log: any) => (
                     <div key={log.id} className="flex items-start gap-3 rounded-lg px-2 py-2.5">
-                      <Avatar className="mt-0.5 h-7 w-7 shrink-0">
-                        <AvatarImage src={log.user?.imageUrl || ""} />
-                        <AvatarFallback className="bg-foreground text-[10px] text-background">
-                          {getInitials(log.user?.firstName, log.user?.lastName)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <UserAvatar user={log.user} size="sm" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-foreground">{getActivityDescription(log)}</p>
                         {log.project && (

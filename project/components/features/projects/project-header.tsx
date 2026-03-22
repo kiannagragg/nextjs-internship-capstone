@@ -51,14 +51,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { StackedAvatars } from "@/components/shared/user-avatar"
 
 import { useProjectHeaderLogic } from "@/hooks/use-project-header"
 import { useUIStore } from "@/stores/ui-store"
 
 // --- Helpers ---
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  return ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U"
-}
 
 const PRIORITY_STYLES = {
   high: "bg-red-500/10 text-red-600 dark:text-red-400",
@@ -235,23 +233,11 @@ export function ProjectHeader({ project, isPinned }: any) {
 
           {/* Members & Add Member Dialog */}
           <div className="flex items-center gap-3">
-            <div className="flex -space-x-2">
-              {project.members?.slice(0, 5).map((member: any) => (
-                <div
-                  key={member.userId}
-                  className="relative z-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-foreground text-xs font-bold text-background transition-transform hover:z-10 hover:scale-110"
-                  title={`${member.user?.firstName} ${member.user?.lastName}`}
-                >
-                  {getInitials(member.user?.firstName, member.user?.lastName)}
-                </div>
-              ))}
-              {project.members?.length > 5 && (
-                <div className="relative z-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-muted text-xs font-medium text-muted-foreground">
-                  +{project.members.length - 5}
-                </div>
-              )}
-            </div>
-
+            <StackedAvatars
+              users={project.members?.map((m: any) => ({ user: m.user })) || []}
+              max={5}
+              size="md"
+            />
             <button
               onClick={() => openInviteMemberModal(project.id)}
               className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground transition-colors hover:border-foreground hover:bg-muted hover:text-foreground"

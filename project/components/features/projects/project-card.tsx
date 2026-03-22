@@ -38,6 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { UserAvatar, StackedAvatars } from "@/components/shared/user-avatar"
 
 import { type ProjectCardData } from "@/types/index"
 import { useProjects } from "@/hooks/use-projects"
@@ -45,10 +46,6 @@ import { useToast } from "@/hooks/use-toast"
 import { useUIStore } from "@/stores/ui-store"
 
 // --- Helpers ---
-
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  return ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U"
-}
 
 function formatDate(date: Date | string) {
   return new Intl.DateTimeFormat("en-US", {
@@ -313,22 +310,14 @@ export function ProjectCard({ project }: ProjectCardProps) {
         </div>
 
         <div className="flex items-center justify-between border-t border-border px-5 py-4">
-          <div className="flex -space-x-1.5">
-            {displayMembers.map((member) => (
-              <div
-                key={member.user.id}
-                className="relative z-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-background bg-foreground text-[10px] font-bold text-background transition-transform hover:z-10 hover:scale-110"
-                title={`${member.user.firstName} ${member.user.lastName}`}
-              >
-                {getInitials(member.user.firstName, member.user.lastName)}
-              </div>
-            ))}
-            {remainingMembers > 0 && (
-              <div className="relative z-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-secondary text-[10px] font-bold text-secondary-foreground transition-transform hover:z-10 hover:scale-110">
-                +{remainingMembers}
-              </div>
-            )}
-            {project.members?.length === 0 && (
+          <div>
+            {project.members?.length > 0 ? (
+              <StackedAvatars
+                users={project.members.map((m: any) => ({ user: m.user }))}
+                max={3}
+                size="md"
+              />
+            ) : (
               <span className="text-xs text-muted-foreground">Unassigned</span>
             )}
           </div>

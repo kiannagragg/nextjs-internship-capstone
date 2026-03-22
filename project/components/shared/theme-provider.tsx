@@ -14,45 +14,38 @@ type ThemeProviderState = {
   setTheme: (theme: Theme) => void
 }
 
-const initialState: ThemeProviderState = {
+const ThemeProviderContext = createContext<ThemeProviderState>({
   theme: "light",
   setTheme: () => null,
+})
+
+function getInitialTheme(): Theme {
+  if (typeof window !== "undefined") {
+    const stored = localStorage.getItem("theme") as Theme
+    if (stored === "dark" || stored === "light") return stored
+  }
+  return "light"
 }
 
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
-
-export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>("light") // always "light" on first render
-  const [mounted, setMounted] = useState(false)
-
-  // Sync with localStorage after hydration
-  useEffect(() => {
-    const stored = localStorage.getItem("theme") as Theme
-    if (stored) {
-      // defer setting state to avoid synchronous update warning
-      requestAnimationFrame(() => setTheme(stored))
-    }
-    requestAnimationFrame(() => setMounted(true))
-  }, [])
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setTheme] = useState<Theme>(getInitialTheme)
 
   useEffect(() => {
-    const root = window.document.documentElement
+    const root = document.documentElement
     root.classList.remove("light", "dark")
     root.classList.add(theme)
-    if (mounted) {
-      localStorage.setItem("theme", theme)
-    }
-  }, [theme, mounted])
+    localStorage.setItem("theme", theme)
+  }, [theme])
 
-  const value = { theme, setTheme }
-
-  return <ThemeProviderContext.Provider value={value}>{children}</ThemeProviderContext.Provider>
+  return (
+    <ThemeProviderContext.Provider value={{ theme, setTheme }}>
+      {children}
+    </ThemeProviderContext.Provider>
+  )
 }
 
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext)
-
-  if (context === undefined) throw new Error("useTheme must be used within a ThemeProvider")
-
+  if (!context) throw new Error("useTheme must be used within a ThemeProvider")
   return context
 }

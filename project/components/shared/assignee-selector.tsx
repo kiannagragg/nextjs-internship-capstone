@@ -16,14 +16,10 @@ import { Check, Search, Loader2, Users, UserPlus } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { getProjectMembersAction } from "@/lib/actions/members"
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  return ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U"
-}
+import { UserAvatar, StackedAvatars } from "@/components/shared/user-avatar"
 
 function getFullName(user: any) {
   return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Unknown"
@@ -157,12 +153,7 @@ export function AssigneeSelector({
                   </div>
 
                   {/* Avatar */}
-                  <Avatar className="h-6 w-6">
-                    <AvatarImage src={member.user?.imageUrl || ""} />
-                    <AvatarFallback className="bg-foreground text-[10px] text-background">
-                      {getInitials(member.user?.firstName, member.user?.lastName)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar user={member.user} size="sm" />
 
                   {/* Name + role */}
                   <div className="min-w-0 flex-1">
@@ -185,7 +176,7 @@ export function AssigneeSelector({
   )
 }
 
-/* ==================== STACKED AVATARS ==================== */
+//* ==================== STACKED AVATARS ==================== */
 
 /**
  * Display stacked assignee avatars with overflow count.
@@ -202,30 +193,12 @@ export function AssigneeAvatars({
   size?: "sm" | "md"
   onClickAction?: (e: React.MouseEvent) => void
 }) {
-  const sizeClasses = size === "sm" ? "h-6 w-6 text-[10px]" : "h-8 w-8 text-xs"
-  const visible = assignees.slice(0, max)
-  const overflow = assignees.length - max
-
   return (
-    <div
-      className={`flex shrink-0 -space-x-1.5 ${onClickAction ? "cursor-pointer" : ""}`}
-      onClick={onClickAction}
-    >
-      {visible.map(({ user }) => (
-        <Avatar key={user.id} className={`inline-block border-2 border-background ${sizeClasses}`}>
-          <AvatarImage src={user.imageUrl || ""} alt={user.firstName || "User"} />
-          <AvatarFallback className="bg-foreground text-background">
-            {getInitials(user.firstName, user.lastName)}
-          </AvatarFallback>
-        </Avatar>
-      ))}
-      {overflow > 0 && (
-        <div
-          className={`inline-flex items-center justify-center rounded-full border-2 border-background bg-muted font-medium text-muted-foreground ${sizeClasses}`}
-        >
-          +{overflow}
-        </div>
-      )}
-    </div>
+    <StackedAvatars
+      users={assignees.map((a) => ({ user: a.user }))}
+      max={max}
+      size={size}
+      onClickAction={onClickAction}
+    />
   )
 }

@@ -3,23 +3,99 @@
 import dynamic from "next/dynamic"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { Menu } from "lucide-react"
+import { useTheme } from "@/components/shared/theme-provider"
+import { dark } from "@clerk/themes"
 
 const ClerkUserButton = dynamic(
   () =>
     import("@clerk/nextjs").then((mod) => {
       const { ClerkLoading, ClerkLoaded, UserButton } = mod
-      return function ClerkUser() {
+
+      return function ClerkUser({ theme }: { theme: string }) {
+        const isDark = theme === "dark"
+
+        // 1. Extract the styling into a reusable object
+        const customAppearance = {
+          baseTheme: isDark ? dark : undefined,
+          variables: isDark
+            ? {
+                colorBackground: "#1a1a1a",
+                colorText: "#f5f5f5",
+                colorTextSecondary: "#a3a3a3",
+                colorInputBackground: "#262626",
+                colorInputText: "#f5f5f5",
+                colorPrimary: "#3b82f6",
+                colorDanger: "#ef4444",
+                colorNeutral: "#d4d4d4",
+              }
+            : undefined,
+          elements: isDark
+            ? {
+                formFieldLabel: { color: "#d4d4d4" },
+                formFieldInput: {
+                  backgroundColor: "#262626",
+                  borderColor: "#404040",
+                  color: "#f5f5f5",
+                },
+                headerTitle: { color: "#f5f5f5" },
+                headerSubtitle: { color: "#a3a3a3" },
+                profileSectionTitle: { color: "#f5f5f5" },
+                profileSectionTitleText: { color: "#f5f5f5" },
+                profileSectionContent: { color: "#d4d4d4" },
+                profileSectionPrimaryButton: { color: "#f5f5f5" },
+                userPreviewMainIdentifier: { color: "#f5f5f5" },
+                userPreviewSecondaryIdentifier: { color: "#f5f5f5" },
+                navbarButton: { color: "#d4d4d4" },
+                navbarButtonActive: { color: "#f5f5f5" },
+                badge: { color: "#d4d4d4", backgroundColor: "#333333" },
+                menuButton: { color: "#d4d4d4" },
+                menuItem: { color: "#d4d4d4" },
+                accordionTriggerButton: { color: "#d4d4d4" },
+                accordionContent: { color: "#d4d4d4" },
+                activeDeviceListItem: { color: "#d4d4d4" },
+                activeDevice: { color: "#d4d4d4" },
+                deviceInfo: { color: "#a3a3a3" },
+              }
+            : {},
+        }
+
         return (
           <>
             <ClerkLoading>
               <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
             </ClerkLoading>
             <ClerkLoaded>
+              <style jsx global>{`
+                .dark .cl-rootBox {
+                  color: #f5f5f5;
+                }
+                .dark .cl-rootBox h1,
+                .dark .cl-rootBox h2,
+                .dark .cl-rootBox h3 {
+                  color: #f5f5f5;
+                }
+                .dark .cl-rootBox p,
+                .dark .cl-rootBox span,
+                .dark .cl-rootBox label {
+                  color: #d4d4d4;
+                }
+                .dark .cl-rootBox [class^="cl-internal-"] {
+                  color: inherit;
+                }
+              `}</style>
+
               <UserButton
+                // 2. Apply to the Button & Dropdown
                 appearance={{
+                  ...customAppearance,
                   elements: {
-                    avatarBox: "h-8 w-8",
+                    ...customAppearance.elements,
+                    avatarBox: "h-8 w-8", // Keep your custom avatar sizing
                   },
+                }}
+                // 3. Apply to the "Manage Account" Modal!
+                userProfileProps={{
+                  appearance: customAppearance,
                 }}
               />
             </ClerkLoaded>
@@ -46,6 +122,9 @@ interface TopNavProps {
 }
 
 export function TopNav({ onMenuClick }: TopNavProps) {
+  // Grab the theme from the provider
+  const { theme } = useTheme()
+
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-background px-4 sm:px-6">
       {/* Hamburger — mobile only */}
@@ -61,7 +140,8 @@ export function TopNav({ onMenuClick }: TopNavProps) {
       <div className="flex items-center gap-4">
         <ThemeToggle />
         <NotificationBell />
-        <ClerkUserButton />
+        {/* Pass the theme down to the dynamic UserButton */}
+        <ClerkUserButton theme={theme} />
       </div>
     </header>
   )

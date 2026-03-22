@@ -24,11 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  return ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U"
-}
-
+import { UserAvatar } from "@/components/shared/user-avatar"
 interface MemberDetailSheetProps {
   projectId: string | null
   targetUserId: string | null
@@ -92,9 +88,7 @@ export function MemberDetailSheet({
             <div className="mt-6 space-y-6">
               {/* Avatar + Name */}
               <div className="flex flex-col items-center text-center">
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-foreground text-2xl font-bold text-background">
-                  {getInitials(member.user?.firstName, member.user?.lastName)}
-                </div>
+                <UserAvatar user={member.user} size="2xl" />
                 <h2 className="mt-3 text-xl font-bold text-foreground">{fullName}</h2>
                 <p className="text-sm text-muted-foreground">
                   {member.user?.role || "Team Member"} · {member.user?.email}
