@@ -3,12 +3,7 @@
 import { Users, Loader2 } from "lucide-react"
 import { UserAvatar } from "@/components/shared/user-avatar"
 import type { TeamMember } from "@/types/team"
-
-/* ==================== HELPERS ==================== */
-
-function getFullName(user: any) {
-  return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Unknown"
-}
+import { getFullName } from "@/lib/utils"
 
 const ROLE_BADGE_STYLES: Record<string, string> = {
   admin: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",

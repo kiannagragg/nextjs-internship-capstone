@@ -109,3 +109,11 @@ export function calculateProgress(counts?: { tasks?: number; completedTasks?: nu
   const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
   return { total, completed, percent }
 }
+
+export function getFullName(
+  user?: { firstName?: string | null; lastName?: string | null } | null
+): string {
+  if (!user) return "Unknown User"
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim()
+  return name || "Unknown User"
+}

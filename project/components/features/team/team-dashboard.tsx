@@ -5,6 +5,7 @@ import { UserPlus } from "lucide-react"
 import { useTeamMembers } from "@/hooks/use-team-member"
 import { useProjectInvitations } from "@/hooks/use-invitations"
 import { useUIStore } from "@/stores/ui-store"
+import { getFullName } from "@/lib/utils"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -22,12 +23,6 @@ import { TeamMemberGrid } from "@/components/features/team/team-member-grid"
 import { MemberDetailSheet } from "@/components/features/team/member-detail-sheet"
 
 import type { TeamProject } from "@/types/team"
-
-/* ==================== HELPERS ==================== */
-
-function getFullName(user: any) {
-  return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Unknown"
-}
 
 /* ==================== COMPONENT ==================== */
 
