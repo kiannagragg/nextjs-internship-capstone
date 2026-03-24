@@ -1,7 +1,4 @@
 // TypeScript type definitions
-// Task 1.3: Set up project structure and folder organization
-
-// Re-export all Drizzle inferred types
 export type {
   User,
   NewUser,
@@ -31,7 +28,6 @@ export type {
 
 /* ==================== ENUM VALUE TYPES ==================== */
 /* Derive union types from Drizzle enums for use in forms, validation, etc. */
-
 export type ProjectStatus = "active" | "completed"
 export type ProjectPriority = "low" | "medium" | "high"
 export type ProjectVisibility = "public" | "private"
@@ -160,7 +156,7 @@ export type DashboardStats = {
   pendingTasks: number
   completedTasks: number
   teamMembers: number
-  activeProjectsTrend: number // percentage change from last period
+  activeProjectsTrend: number
   pendingTasksTrend: number
   completedTasksTrend: number
   teamMembersTrend: number

@@ -1,10 +1,3 @@
-/* ============================================
-   Team Types
-
-   Shared between server page, client
-   components, and hooks.
-   ============================================ */
-
 export type TeamProject = {
   id: string
   title: string

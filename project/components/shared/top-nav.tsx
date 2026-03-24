@@ -65,25 +65,6 @@ const ClerkUserButton = dynamic(
               <div className="h-8 w-8 animate-pulse rounded-full bg-muted" />
             </ClerkLoading>
             <ClerkLoaded>
-              <style jsx global>{`
-                .dark .cl-rootBox {
-                  color: #f5f5f5;
-                }
-                .dark .cl-rootBox h1,
-                .dark .cl-rootBox h2,
-                .dark .cl-rootBox h3 {
-                  color: #f5f5f5;
-                }
-                .dark .cl-rootBox p,
-                .dark .cl-rootBox span,
-                .dark .cl-rootBox label {
-                  color: #d4d4d4;
-                }
-                .dark .cl-rootBox [class^="cl-internal-"] {
-                  color: inherit;
-                }
-              `}</style>
-
               <UserButton
                 // 2. Apply to the Button & Dropdown
                 appearance={{

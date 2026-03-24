@@ -30,36 +30,17 @@ export function SignUpForm() {
 
   return (
     <>
-      <style jsx global>{`
-        .dark .cl-rootBox {
-          color: #f5f5f5;
-        }
-        .dark .cl-rootBox h1,
-        .dark .cl-rootBox h2,
-        .dark .cl-rootBox h3 {
-          color: #f5f5f5;
-        }
-        .dark .cl-rootBox p,
-        .dark .cl-rootBox span,
-        .dark .cl-rootBox label {
-          color: #d4d4d4;
-        }
-        .dark .cl-rootBox [class^="cl-internal-"] {
-          color: inherit;
-        }
-      `}</style>
-
       <SignUp
         forceRedirectUrl="/onboarding"
         appearance={{
-          baseTheme: isDark ? dark : undefined,
+          theme: isDark ? dark : undefined,
           variables: isDark
             ? {
                 colorBackground: "#1a1a1a",
-                colorText: "#f5f5f5",
-                colorTextSecondary: "#a3a3a3",
-                colorInputBackground: "#262626",
-                colorInputText: "#f5f5f5",
+                colorForeground: "#f5f5f5",
+                colorMuted: "#a3a3a3",
+                colorInput: "#262626",
+                colorInputForeground: "#f5f5f5",
                 colorPrimary: "#3b82f6",
                 colorDanger: "#ef4444",
                 colorNeutral: "#d4d4d4",
@@ -68,11 +49,11 @@ export function SignUpForm() {
               }
             : {
                 colorPrimary: "#000000",
-                colorText: "#000000",
-                colorTextSecondary: "#6B7280",
+                colorForeground: "#000000",
+                colorMuted: "#6B7280",
                 colorBackground: "#FFFFFF",
-                colorInputBackground: "#FFFFFF",
-                colorInputText: "#000000",
+                colorInput: "#FFFFFF",
+                colorInputForeground: "#000000",
                 borderRadius: "0.5rem",
                 fontFamily: "var(--font-body), sans-serif",
               },
@@ -88,8 +69,8 @@ export function SignUpForm() {
             formFieldInput:
               "border-border focus:border-ring focus:ring-1 focus:ring-ring placeholder:text-muted-foreground",
             formButtonPrimary: "bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg",
-            footerActionLink: "text-foreground font-semibold hover:text-brand",
-            footer: "text-muted-foreground",
+            footerActionLink: "text-foreground font-semibold hover:text-foreground",
+            footer: "bg-background text-foreground",
 
             ...(isDark && {
               formFieldInput:
