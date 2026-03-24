@@ -1,5 +1,6 @@
 import Link from "next/link"
 import { ArrowRight } from "lucide-react"
+import { getUserId } from "@/lib/auth"
 
 function DecorativeCurveUpLeft({ className }: { className?: string }) {
   return (
@@ -61,7 +62,8 @@ function DecorativeCurveRight({ className }: { className?: string }) {
   )
 }
 
-export function Hero() {
+export async function Hero() {
+  const userId = await getUserId()
   return (
     <section className="relative overflow-hidden px-4 pb-20 pt-16 sm:px-6 md:pb-32 md:pt-28">
       {/* Upper-left small curve */}
@@ -86,17 +88,26 @@ export function Hero() {
         </h1>
 
         <p className="mx-auto mb-8 max-w-md text-sm leading-relaxed sm:max-w-lg sm:text-base md:mb-10 md:max-w-xl md:text-lg">
-          Flow Like Operations Engineering — where your team&apos;s work moves with intention, not
-          friction.
+          Go with the FLOE — where your work moves with intention, not friction.
         </p>
 
-        <Link
-          href="/sign-up"
-          className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg sm:px-7 sm:text-base"
-        >
-          Get Started Free
-          <ArrowRight size={16} />
-        </Link>
+        {userId ? (
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg sm:px-7 sm:text-base"
+          >
+            Continue to Dashboard
+            <ArrowRight size={16} />
+          </Link>
+        ) : (
+          <Link
+            href="/sign-up"
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg sm:px-7 sm:text-base"
+          >
+            Get Started Free
+            <ArrowRight size={16} />
+          </Link>
+        )}
       </div>
     </section>
   )

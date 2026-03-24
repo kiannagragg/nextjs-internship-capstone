@@ -5,10 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/**
- * Calculates a new fractional position between two items and detects if the
- * gap has become too small, requiring a background rebalance.
- */
 export function calculateFractionalPosition(
   prevPosition?: number,
   nextPosition?: number
@@ -16,37 +12,23 @@ export function calculateFractionalPosition(
   let newPosition: number
   let needsRebalance = false
 
-  // Dropped perfectly between two items
   if (prevPosition !== undefined && nextPosition !== undefined) {
     newPosition = Math.round((prevPosition + nextPosition) / 2)
-    // Collision detection: If rounding squished them together
+    // Collision detection
     if (newPosition === prevPosition || newPosition === nextPosition) {
       needsRebalance = true
     }
-  }
-  // Dropped at the very bottom/right
-  else if (prevPosition !== undefined) {
+  } else if (prevPosition !== undefined) {
     newPosition = prevPosition + 65536
-  }
-  // Dropped at the very top/left
-  else if (nextPosition !== undefined) {
-    newPosition = Math.round(nextPosition / 2)
-    // Edge case: If nextPosition was 1, half is 0.5, rounded is 1 (Collision!)
-    if (newPosition === nextPosition) {
-      needsRebalance = true
-    }
-  }
-  // First item ever in an empty list
-  else {
+  } else if (nextPosition !== undefined) {
+    newPosition = nextPosition - 65536
+  } else {
     newPosition = 65536
   }
 
   return { position: newPosition, needsRebalance }
 }
 
-/**
- * Converts a date to a relative time string (e.g., "just now", "5m ago", "2 hours ago").
- */
 export function timeAgo(dateInput: Date | string): string {
   const date = new Date(dateInput)
   const now = new Date()
@@ -81,4 +63,54 @@ export function timeAgo(dateInput: Date | string): string {
 
   const yearsPast = Math.floor(daysPast / 365)
   return yearsPast === 1 ? "1 year ago" : `${yearsPast} years ago`
+}
+
+type DateFormat = "full" | "long" | "shortWithYear" | "short"
+
+export function formatDate(date: Date | string, format: DateFormat = "shortWithYear"): string {
+  const d = new Date(date)
+
+  switch (format) {
+    case "full":
+      // "Tuesday, March 24, 2026" (For Dashboard Greeting)
+      return d.toLocaleDateString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    case "long":
+      // "March 24, 2026" (For Date Picker)
+      return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    case "short":
+      // "Mar 24" (For Task Cards)
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    case "shortWithYear":
+    default:
+      // "Mar 24, 2026" (For Project Cards)
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  }
+}
+
+export function calculateProgress(counts?: { tasks?: number; completedTasks?: number }) {
+  const total = counts?.tasks || 0
+  const completed = counts?.completedTasks || 0
+  const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
+  return { total, completed, percent }
+}
+
+export function getFullName(
+  user?: { firstName?: string | null; lastName?: string | null } | null
+): string {
+  if (!user) return "Unknown User"
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim()
+  return name || "Unknown User"
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return "0 B"
+  const k = 1024
+  const sizes = ["B", "KB", "MB", "GB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }

@@ -38,37 +38,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { StackedAvatars } from "@/components/shared/user-avatar"
+import { ProgressBar } from "@/components/shared/progress-bar"
 
 import { type ProjectCardData } from "@/types/index"
 import { useProjects } from "@/hooks/use-projects"
 import { useToast } from "@/hooks/use-toast"
 import { useUIStore } from "@/stores/ui-store"
+import { formatDate } from "@/lib/utils"
 
 // --- Helpers ---
-
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  return ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U"
-}
-
-function formatDate(date: Date | string) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(date))
-}
-
-function calculateProgress(counts?: { tasks?: number; completedTasks?: number }) {
-  const total = counts?.tasks || 0
-  const completed = counts?.completedTasks || 0
-  const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
-  return { total, completed, percent }
-}
-
 function getProjectDateStatus(project: ProjectCardData) {
   if (project.status === "completed") {
     return {
-      label: `Completed • ${formatDate(project.updatedAt)}`,
+      label: `Completed • ${formatDate(project.updatedAt, "shortWithYear")}`,
       color: "text-muted-foreground",
       icon: CheckCircle2,
     }
@@ -85,21 +68,21 @@ function getProjectDateStatus(project: ProjectCardData) {
 
     if (diffDays < 0) {
       return {
-        label: `Overdue • ${formatDate(project.dueDate)}`,
+        label: `Overdue • ${formatDate(project.dueDate, "shortWithYear")}`,
         color: "text-red-500 font-medium",
         icon: AlertCircle,
       }
     }
 
     return {
-      label: `${diffDays} days left • ${formatDate(project.dueDate)}`,
+      label: `${diffDays} days left • ${formatDate(project.dueDate, "shortWithYear")}`,
       color: "text-emerald-600 dark:text-emerald-400 font-medium",
       icon: Calendar,
     }
   }
 
   return {
-    label: `Updated • ${formatDate(project.updatedAt)}`,
+    label: `Updated • ${formatDate(project.updatedAt, "shortWithYear")}`,
     color: "text-muted-foreground",
     icon: Clock,
   }
@@ -119,7 +102,7 @@ type ProjectCardProps = {
 
 export function ProjectCard({ project }: ProjectCardProps) {
   const { toast } = useToast()
-  const { openEditProjectModal } = useUIStore()
+  const openEditProjectModal = useUIStore((state) => state.openEditProjectModal)
 
   const { deleteProject, isDeleting, togglePin, toggleStatus, toggleArchive, getProjectFromCache } =
     useProjects()
@@ -132,8 +115,6 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const activeProject = cachedProject || project
 
   // --- Handlers ---
-
-  // Pass the CURRENT pin state. The server action flips it internally.
   const handleTogglePin = () => togglePin({ id: project.id, currentPinState: project.isPinned })
 
   const handleToggleStatus = () => {
@@ -159,11 +140,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
     }
   }
 
-  // --- Pre-computed View Data ---
-  const progress = calculateProgress(activeProject._count)
   const dateInfo = getProjectDateStatus(activeProject)
-  const displayMembers = activeProject.members?.slice(0, 3) || []
-  const remainingMembers = (activeProject.members?.length || 0) - 3
 
   return (
     <>
@@ -271,21 +248,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
           </p>
 
           <div className="mb-4">
-            <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted-foreground">
-              <span>Progress</span>
-              <span className="text-foreground">
-                {progress.percent}% ({progress.completed}/{progress.total})
-              </span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${progress.percent}%`,
-                  backgroundColor: project.color || "#2D6EF7",
-                }}
-              />
-            </div>
+            <ProgressBar counts={activeProject._count} color={project.color} size="sm" />
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -313,22 +276,14 @@ export function ProjectCard({ project }: ProjectCardProps) {
         </div>
 
         <div className="flex items-center justify-between border-t border-border px-5 py-4">
-          <div className="flex -space-x-1.5">
-            {displayMembers.map((member) => (
-              <div
-                key={member.user.id}
-                className="relative z-0 flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-background bg-foreground text-[10px] font-bold text-background transition-transform hover:z-10 hover:scale-110"
-                title={`${member.user.firstName} ${member.user.lastName}`}
-              >
-                {getInitials(member.user.firstName, member.user.lastName)}
-              </div>
-            ))}
-            {remainingMembers > 0 && (
-              <div className="relative z-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-background bg-secondary text-[10px] font-bold text-secondary-foreground transition-transform hover:z-10 hover:scale-110">
-                +{remainingMembers}
-              </div>
-            )}
-            {project.members?.length === 0 && (
+          <div>
+            {project.members?.length > 0 ? (
+              <StackedAvatars
+                users={project.members.map((m) => ({ user: m.user }))}
+                max={3}
+                size="md"
+              />
+            ) : (
               <span className="text-xs text-muted-foreground">Unassigned</span>
             )}
           </div>

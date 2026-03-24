@@ -1,58 +1,32 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useEffect, useState } from "react"
+import { useEffect } from "react"
+import { useUIStore } from "@/stores/ui-store"
 
-type Theme = "dark" | "light"
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const { theme, setTheme } = useUIStore()
 
-type ThemeProviderProps = {
-  children: React.ReactNode
-}
-
-type ThemeProviderState = {
-  theme: Theme
-  setTheme: (theme: Theme) => void
-}
-
-const initialState: ThemeProviderState = {
-  theme: "light",
-  setTheme: () => null,
-}
-
-const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
-
-export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>("light") // always "light" on first render
-  const [mounted, setMounted] = useState(false)
-
-  // Sync with localStorage after hydration
   useEffect(() => {
-    const stored = localStorage.getItem("theme") as Theme
-    if (stored) {
-      // defer setting state to avoid synchronous update warning
-      requestAnimationFrame(() => setTheme(stored))
+    const stored = localStorage.getItem("theme")
+    if (stored === "dark" || stored === "light") {
+      setTheme(stored)
     }
-    requestAnimationFrame(() => setMounted(true))
-  }, [])
+  }, [setTheme])
 
   useEffect(() => {
-    const root = window.document.documentElement
+    const root = document.documentElement
     root.classList.remove("light", "dark")
     root.classList.add(theme)
-    if (mounted) {
-      localStorage.setItem("theme", theme)
-    }
-  }, [theme, mounted])
+    localStorage.setItem("theme", theme)
+  }, [theme])
 
-  const value = { theme, setTheme }
-
-  return <ThemeProviderContext.Provider value={value}>{children}</ThemeProviderContext.Provider>
+  return <>{children}</>
 }
 
 export const useTheme = () => {
-  const context = useContext(ThemeProviderContext)
+  const theme = useUIStore((state) => state.theme)
+  const setTheme = useUIStore((state) => state.setTheme)
 
-  if (context === undefined) throw new Error("useTheme must be used within a ThemeProvider")
-
-  return context
+  return { theme, setTheme }
 }

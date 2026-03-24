@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { Calendar, MoreHorizontal, Edit, Copy, Trash, User } from "lucide-react"
 import { TaskWithAssignees } from "@/types"
 import { useSortable } from "@dnd-kit/sortable"
@@ -7,9 +8,12 @@ import { CSS } from "@dnd-kit/utilities"
 import DOMPurify from "dompurify"
 
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/hooks/use-toast"
+import { DatePicker } from "@/components/shared/date-picker"
+import { AssigneeAvatars } from "@/components/shared/assignee-selector"
+import { AssigneeSelector } from "@/components/shared/assignee-selector"
+import { formatDate } from "@/lib/utils"
 
 import {
   DropdownMenu,
@@ -21,13 +25,29 @@ import {
 
 interface TaskCardProps {
   task: TaskWithAssignees
+  projectId: string
   onClick?: (task: TaskWithAssignees) => void
   onDelete?: (taskId: string) => void
+  onAssignToggle?: (taskId: string, userId: string, isAssigning: boolean) => void
+  onDueDateChange?: (taskId: string, date: Date | undefined) => void
   isOverlay?: boolean
+  isSelected?: boolean
+  onSelect?: (taskId: string, multi: boolean) => void
 }
 
-export function TaskCard({ task, onClick, onDelete, isOverlay }: TaskCardProps) {
+export function TaskCard({
+  task,
+  projectId,
+  onClick,
+  onDelete,
+  onAssignToggle,
+  onDueDateChange,
+  isOverlay,
+  isSelected,
+  onSelect,
+}: TaskCardProps) {
   const { toast } = useToast()
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
 
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -53,18 +73,10 @@ export function TaskCard({ task, onClick, onDelete, isOverlay }: TaskCardProps) 
     }
   }
 
-  const formatDate = (dateString: Date | string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    })
-  }
-
   const getDueDateColor = (dueDate: Date | string | null, isCompleted: boolean) => {
     if (!dueDate || isCompleted) return "text-muted-foreground bg-secondary/50"
 
     const now = new Date()
-
     now.setHours(0, 0, 0, 0)
 
     const due = new Date(dueDate)
@@ -82,6 +94,16 @@ export function TaskCard({ task, onClick, onDelete, isOverlay }: TaskCardProps) 
     return "text-muted-foreground bg-secondary/50"
   }
 
+  const handleClick = (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey) {
+      e.stopPropagation()
+      onSelect?.(task.id, true)
+      return
+    }
+
+    onClick?.(task)
+  }
+
   const handleCopyLink = (e: React.MouseEvent) => {
     e.stopPropagation()
     const url = `${window.location.origin}/projects/${task.projectId}?taskId=${task.id}`
@@ -92,6 +114,17 @@ export function TaskCard({ task, onClick, onDelete, isOverlay }: TaskCardProps) 
       description: "Task link has been copied to your clipboard.",
     })
   }
+
+  const handleAssignToggle = (userId: string, isAssigning: boolean) => {
+    onAssignToggle?.(task.id, userId, isAssigning)
+  }
+
+  const handleDueDateChange = (date: Date | undefined) => {
+    onDueDateChange?.(task.id, date)
+    setIsDatePickerOpen(false)
+  }
+
+  const assignedUserIds = task.assignees?.map((a) => a.user.id) ?? []
 
   const sanitizedDescription =
     typeof window !== "undefined" ? DOMPurify.sanitize(task.description || "") : ""
@@ -110,10 +143,12 @@ export function TaskCard({ task, onClick, onDelete, isOverlay }: TaskCardProps) 
       style={style}
       {...attributes}
       {...listeners}
-      onClick={() => onClick?.(task)}
-      className={`group relative mb-2 flex cursor-pointer flex-col gap-3 rounded-md border border-muted-foreground/20 bg-card p-3 shadow-sm transition-all hover:ring-1 hover:ring-primary ${
-        task.isCompleted ? "opacity-60" : "opacity-100"
-      }`}
+      onClick={handleClick}
+      className={`group relative mb-2 flex cursor-pointer flex-col gap-3 rounded-md border p-3 shadow-sm transition-all hover:ring-1 hover:ring-primary ${
+        isSelected
+          ? "border-primary bg-primary/5 ring-1 ring-primary"
+          : "border-muted-foreground/20 bg-card"
+      } ${task.isCompleted ? "opacity-60" : "opacity-100"}`}
     >
       {/* Top Row: Title & Actions */}
       <div className="flex items-start justify-between gap-2">
@@ -175,8 +210,9 @@ export function TaskCard({ task, onClick, onDelete, isOverlay }: TaskCardProps) 
         />
       )}
 
+      {/* Bottom Row: Priority, Date, Assignees */}
       <div className="mt-2 flex items-center justify-between gap-2">
-        {/* Left Side: Priority & Date */}
+        {/* Left Side: Priority & Clickable Due Date */}
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <Badge
             variant="secondary"
@@ -185,37 +221,71 @@ export function TaskCard({ task, onClick, onDelete, isOverlay }: TaskCardProps) 
             {task.priority || "No Priority"}
           </Badge>
 
+          {/* Clickable due date — opens inline date picker */}
           <div
-            className={`flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 ${getDueDateColor(task.dueDate, task.isCompleted)}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (onDueDateChange) setIsDatePickerOpen(!isDatePickerOpen)
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className={`flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 transition-colors ${
+              onDueDateChange ? "cursor-pointer hover:ring-1 hover:ring-primary/30" : ""
+            } ${getDueDateColor(task.dueDate, task.isCompleted)}`}
           >
             <Calendar size={12} />
             <span className="whitespace-nowrap">
-              {task.dueDate ? formatDate(task.dueDate) : "No Due Date"}
+              {task.dueDate ? formatDate(task.dueDate, "short") : "No Due Date"}
             </span>
           </div>
         </div>
 
-        {/* Right Side: Assignee Avatars */}
-        <div className="flex shrink-0 -space-x-2 overflow-hidden">
+        {/* Right Side: Assignee Avatars with click-to-assign */}
+        <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
           {task.assignees && task.assignees.length > 0 ? (
-            task.assignees.map(({ user }) => (
-              <Avatar key={user.id} className="inline-block h-6 w-6 border-2 border-background">
-                <AvatarImage src={user.imageUrl || ""} alt={user.firstName || "User"} />
-                <AvatarFallback className="bg-primary/10 text-[10px] text-primary">
-                  {user.firstName?.charAt(0) || "U"}
-                </AvatarFallback>
-              </Avatar>
-            ))
+            <AssigneeSelector
+              projectId={projectId}
+              assignedUserIds={assignedUserIds}
+              onToggle={handleAssignToggle}
+              disabled={!onAssignToggle}
+              align="end"
+              trigger={
+                <button className="flex shrink-0 -space-x-1.5">
+                  <AssigneeAvatars assignees={task.assignees} max={3} size="sm" />
+                </button>
+              }
+            />
           ) : (
-            // Fallback Avatar when there are no assignees
-            <Avatar className="inline-block h-6 w-6 border-2 border-background">
-              <AvatarFallback className="bg-muted text-muted-foreground">
-                <User size={12} />
-              </AvatarFallback>
-            </Avatar>
+            <AssigneeSelector
+              projectId={projectId}
+              assignedUserIds={assignedUserIds}
+              onToggle={handleAssignToggle}
+              disabled={!onAssignToggle}
+              align="end"
+              trigger={
+                <button className="flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-muted-foreground/40 text-muted-foreground transition-colors hover:border-foreground hover:text-foreground">
+                  <User size={12} />
+                </button>
+              }
+            />
           )}
         </div>
       </div>
+
+      {/* Inline Date Picker (appears below the card row when clicked) */}
+      {isDatePickerOpen && onDueDateChange && (
+        <div
+          className="mt-1"
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <DatePicker
+            value={task.dueDate ? new Date(task.dueDate) : undefined}
+            onChange={handleDueDateChange}
+            placeholder="Select due date"
+            className="w-full text-foreground"
+          />
+        </div>
+      )}
     </div>
   )
 }

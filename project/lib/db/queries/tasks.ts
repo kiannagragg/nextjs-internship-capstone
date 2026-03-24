@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, count, sql, lte, gte, isNull, inArray } from "drizzle-orm"
+import { eq, and, asc, desc, count, sql, lte, gte, isNull, inArray, or } from "drizzle-orm"
 import { db } from "@/lib/db"
 import {
   tasks,
@@ -9,8 +9,11 @@ import {
   labels,
   taskLabels,
   taskAttachments,
+  notifications,
+  users,
   type NewTask,
 } from "@/lib/db/schema"
+import { isNotificationEnabled } from "./settings"
 
 // Define a type for incoming UploadThing attachments
 type AttachmentInput = { url: string; name: string; size?: number; type?: string }
@@ -521,6 +524,15 @@ export async function assignTask(taskId: string, assigneeUserId: string, assigne
     .onConflictDoNothing()
     .returning()
 
+  const [assigneeUser] = await db
+    .select({ firstName: users.firstName, lastName: users.lastName })
+    .from(users)
+    .where(eq(users.id, assigneeUserId))
+    .limit(1)
+
+  const assigneeName =
+    [assigneeUser?.firstName, assigneeUser?.lastName].filter(Boolean).join(" ") || "a user"
+
   if (assignee) {
     await db.insert(activityLogs).values({
       projectId: task.projectId,
@@ -531,8 +543,39 @@ export async function assignTask(taskId: string, assigneeUserId: string, assigne
       metadata: {
         taskTitle: task.title,
         assigneeId: assigneeUserId,
+        assigneeName,
       },
     })
+
+    // Notify assignee (skip self-assignment)
+    if (assigneeUserId !== assignedByUserId) {
+      const [project] = await db
+        .select({ title: projects.title })
+        .from(projects)
+        .where(eq(projects.id, task.projectId))
+        .limit(1)
+
+      const [assigner] = await db
+        .select({ firstName: users.firstName, lastName: users.lastName })
+        .from(users)
+        .where(eq(users.id, assignedByUserId))
+        .limit(1)
+
+      const assignerName =
+        [assigner?.firstName, assigner?.lastName].filter(Boolean).join(" ") || "Someone"
+
+      const shouldNotify = await isNotificationEnabled(assigneeUserId, "taskAssigned")
+      if (shouldNotify) {
+        await db.insert(notifications).values({
+          userId: assigneeUserId,
+          type: "task_assigned",
+          title: "Task Assigned",
+          message: `${assignerName} assigned you to "${task.title}" in ${project?.title || "a project"}.`,
+          actionUrl: `/projects/${task.projectId}?taskId=${taskId}`,
+          metadata: { projectId: task.projectId, taskId, assignedBy: assignedByUserId },
+        })
+      }
+    }
   }
 
   return assignee ?? null
@@ -558,6 +601,15 @@ export async function unassignTask(
     .delete(taskAssignees)
     .where(and(eq(taskAssignees.taskId, taskId), eq(taskAssignees.userId, assigneeUserId)))
 
+  const [removedUser] = await db
+    .select({ firstName: users.firstName, lastName: users.lastName })
+    .from(users)
+    .where(eq(users.id, assigneeUserId))
+    .limit(1)
+
+  const removedName =
+    [removedUser?.firstName, removedUser?.lastName].filter(Boolean).join(" ") || "a user"
+
   await db.insert(activityLogs).values({
     projectId: task.projectId,
     userId: removedByUserId,
@@ -567,10 +619,40 @@ export async function unassignTask(
     metadata: {
       taskTitle: task.title,
       assigneeId: assigneeUserId,
+      assigneeName: removedName,
     },
   })
-}
 
+  // Notify removed user (skip self-removal)
+  if (assigneeUserId !== removedByUserId) {
+    const [project] = await db
+      .select({ title: projects.title })
+      .from(projects)
+      .where(eq(projects.id, task.projectId))
+      .limit(1)
+
+    const [remover] = await db
+      .select({ firstName: users.firstName, lastName: users.lastName })
+      .from(users)
+      .where(eq(users.id, removedByUserId))
+      .limit(1)
+
+    const removerName =
+      [remover?.firstName, remover?.lastName].filter(Boolean).join(" ") || "Someone"
+
+    const shouldNotify = await isNotificationEnabled(assigneeUserId, "taskAssigned")
+    if (shouldNotify) {
+      await db.insert(notifications).values({
+        userId: assigneeUserId,
+        type: "task_assigned",
+        title: "Task Unassigned",
+        message: `${removerName} removed you from "${task.title}" in ${project?.title || "a project"}.`,
+        actionUrl: `/projects/${task.projectId}?taskId=${taskId}`,
+        metadata: { projectId: task.projectId, taskId, removedBy: removedByUserId },
+      })
+    }
+  }
+}
 /**
  * Reorder tasks within a list (batch position update).
  */
@@ -611,7 +693,15 @@ export async function getTasksByAssignee(userId: string) {
  */
 export async function getTaskActivityLogs(taskId: string) {
   return db.query.activityLogs.findMany({
-    where: and(eq(activityLogs.entityId, taskId), eq(activityLogs.entityType, "task")),
+    where: or(
+      // Task-level activity (created, updated, moved, completed, assigned, etc.)
+      and(eq(activityLogs.entityId, taskId), eq(activityLogs.entityType, "task")),
+      // Comment activity (entityType is "comment" but metadata.taskId matches)
+      and(
+        eq(activityLogs.entityType, "comment"),
+        sql`${activityLogs.metadata}->>'taskId' = ${taskId}`
+      )
+    ),
     orderBy: desc(activityLogs.createdAt),
     with: {
       user: {

@@ -27,14 +27,6 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -59,14 +51,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { StackedAvatars } from "@/components/shared/user-avatar"
+import { ProgressBar } from "@/components/shared/progress-bar"
 
 import { useProjectHeaderLogic } from "@/hooks/use-project-header"
+import { useUIStore } from "@/stores/ui-store"
 
 // --- Helpers ---
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  return ((firstName?.[0] || "") + (lastName?.[0] || "")).toUpperCase() || "U"
-}
-
 const PRIORITY_STYLES = {
   high: "bg-red-500/10 text-red-600 dark:text-red-400",
   medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -77,6 +68,7 @@ const PRIORITY_STYLES = {
 export function ProjectHeader({ project, isPinned }: any) {
   const { state, setters, handlers, viewData } = useProjectHeaderLogic(project, isPinned)
   const { progressData, updatedText, dueDateText, showCompletionPrompt } = viewData
+  const { openInviteMemberModal } = useUIStore()
 
   const router = useRouter()
   const pathname = usePathname()
@@ -218,89 +210,34 @@ export function ProjectHeader({ project, isPinned }: any) {
 
           <div className="hidden h-6 w-px bg-border sm:block" />
 
-          {/* Fixed Progress */}
+          {/* Progress Bar */}
           <div className="w-full sm:w-56">
-            <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-muted-foreground">
-              <span>Progress</span>
-              <span className="text-foreground">
-                {progressData.percent}% ({progressData.completed}/{progressData.total})
-              </span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${progressData.percent}%`,
-                  backgroundColor: project.color || "#2D6EF7",
-                }}
-              />
-            </div>
+            <ProgressBar
+              counts={{
+                tasks: progressData.total,
+                completedTasks: progressData.completed,
+              }}
+              color={project.color}
+              size="sm"
+            />
           </div>
 
           <div className="hidden h-6 w-px bg-border sm:block" />
 
           {/* Members & Add Member Dialog */}
           <div className="flex items-center gap-3">
-            <div className="flex -space-x-2">
-              {project.members?.slice(0, 5).map((member: any) => (
-                <div
-                  key={member.userId}
-                  className="relative z-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-foreground text-xs font-bold text-background transition-transform hover:z-10 hover:scale-110"
-                  title={`${member.user?.firstName} ${member.user?.lastName}`}
-                >
-                  {getInitials(member.user?.firstName, member.user?.lastName)}
-                </div>
-              ))}
-            </div>
-
-            <Dialog open={state.isAddMemberOpen} onOpenChange={setters.setIsAddMemberOpen}>
-              <DialogTrigger asChild>
-                <button
-                  className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground transition-colors hover:border-foreground hover:bg-muted hover:text-foreground"
-                  aria-label="Add Member"
-                >
-                  <Plus size={16} />
-                </button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="text-foreground">Add Team Member</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label className="text-foreground" htmlFor="email">
-                      Email address
-                    </Label>
-                    <Input className="text-foreground" id="email" placeholder="name@example.com" />
-                  </div>
-                  <div className="grid gap-2 text-foreground">
-                    <Label className="text-foreground" htmlFor="role">
-                      Role
-                    </Label>
-                    <Select defaultValue="contributor">
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a role" />
-                      </SelectTrigger>
-                      <SelectContent className="text-foreground">
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="contributor">Contributor</SelectItem>
-                        <SelectItem value="viewer">Viewer</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    className="text-foreground"
-                    variant="outline"
-                    onClick={() => setters.setIsAddMemberOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={handlers.handleInviteMember}>Send Invite</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <StackedAvatars
+              users={project.members?.map((m: any) => ({ user: m.user })) || []}
+              max={5}
+              size="md"
+            />
+            <button
+              onClick={() => openInviteMemberModal(project.id)}
+              className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-muted-foreground/50 text-muted-foreground transition-colors hover:border-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Invite Member"
+            >
+              <Plus size={16} />
+            </button>
           </div>
 
           <div className="hidden h-6 w-px bg-border lg:block" />

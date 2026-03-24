@@ -11,7 +11,6 @@ export async function getCurrentDbUserAction() {
 
     if (!user) return { success: false, error: "User not found" }
 
-    // Return only what the UI needs
     return {
       success: true,
       data: {
@@ -19,6 +18,8 @@ export async function getCurrentDbUserAction() {
         firstName: user.firstName,
         lastName: user.lastName,
         imageUrl: user.imageUrl,
+        email: user.email,
+        role: user.role,
       },
     }
   } catch (error) {

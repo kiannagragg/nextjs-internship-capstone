@@ -1,39 +1,33 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, X, CheckSquare, FolderOutput, UserPlus, Trash2 } from "lucide-react"
 import {
   DndContext,
   DragOverlay,
+  closestCenter,
+  pointerWithin,
+  rectIntersection,
+  getFirstCollision,
   closestCorners,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
-  DragStartEvent,
-  DragOverEvent,
-  DragEndEvent,
+  MeasuringStrategy,
+  type DragStartEvent,
+  type DragOverEvent,
+  type DragEndEvent,
+  type CollisionDetection,
+  type UniqueIdentifier,
 } from "@dnd-kit/core"
-import { SortableContext, horizontalListSortingStrategy, arrayMove } from "@dnd-kit/sortable"
-
-import { useBoardStore } from "@/stores/board-store"
-import { useTasks } from "@/hooks/use-tasks"
-import { useLists } from "@/hooks/use-lists"
-import { useTaskFilter } from "@/hooks/use-task-filter"
-import { calculateFractionalPosition } from "@/lib/utils"
-
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
+  SortableContext,
+  horizontalListSortingStrategy,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable"
+
 import {
   Select,
   SelectContent,
@@ -42,19 +36,73 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-import { ListColumn } from "./list-column"
+import { createTaskAction, assignTaskAction, unassignTaskAction } from "@/lib/actions/tasks"
+import { useBoardStore } from "@/stores/board-store"
+import { useTasks } from "@/hooks/use-tasks"
+import { useLists } from "@/hooks/use-lists"
+import { useTaskFilter } from "@/hooks/use-task-filter"
+import { useProjectChannel } from "@/hooks/use-project-channel"
+import { calculateFractionalPosition } from "@/lib/utils"
 import { TaskCard } from "@/components/features/tasks/task-card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import type { TaskWithAssignees, ProjectWithMembers, ListWithTasks } from "@/types"
 import { TaskSheet } from "../tasks/task-sheet"
+import { ListColumn } from "./list-column"
+import { BulkActionsToolbar } from "./bulk-actions-toolbar"
+import { BoardModals } from "./board-modals"
 
 const PRESET_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#64748B"]
 
 interface KanbanBoardProps {
-  project: any
-  initialLists: any[]
+  project: ProjectWithMembers
+  initialLists: ListWithTasks[]
   currentUserId: string
 }
 
+function customCollisionDetection(
+  args: Parameters<CollisionDetection>[0]
+): ReturnType<CollisionDetection> {
+  const activeType = args.active.data.current?.type?.toLowerCase()
+
+  if (activeType === "list") {
+    const { pointerCoordinates, droppableContainers, droppableRects } = args
+
+    if (pointerCoordinates) {
+      for (const container of droppableContainers) {
+        if (container.data.current?.type?.toLowerCase() === "list") {
+          const rect = droppableRects.get(container.id)
+          if (rect && pointerCoordinates.x >= rect.left && pointerCoordinates.x <= rect.right) {
+            return [{ id: container.id, data: container.data.current }]
+          }
+        }
+      }
+    }
+    return closestCorners(args)
+  }
+
+  // --- Normal Task Collision (Keep your existing logic below) ---
+  const pointerCollisions = pointerWithin(args)
+
+  if (pointerCollisions.length > 0) {
+    const closestCollisions = closestCenter({
+      ...args,
+      droppableContainers: args.droppableContainers.filter((container) =>
+        pointerCollisions.some((collision) => collision.id === container.id)
+      ),
+    })
+
+    if (closestCollisions.length > 0) {
+      return closestCollisions
+    }
+    return pointerCollisions
+  }
+
+  return rectIntersection(args)
+}
+
 export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoardProps) {
+  useProjectChannel(project.id)
   const projectId = project?.id
 
   // --- HOOKS & STORE ---
@@ -87,6 +135,10 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     activeDragList,
     setActiveDragItem,
     clearActiveDragItem,
+    selectedTaskIds,
+    toggleTaskSelection,
+    clearTaskSelection,
+    selectAllTasks,
   } = useBoardStore()
 
   useEffect(() => {
@@ -119,12 +171,123 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null)
   const [selectedTask, setSelectedTask] = useState<any | null>(null)
 
+  const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false)
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false)
+
+  // --- BULK TASK OPERATIONS ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+        e.preventDefault()
+        const allTaskIds = storeLists.flatMap((list) => list.tasks?.map((t) => t.id) || [])
+        selectAllTasks(allTaskIds)
+      }
+
+      if (e.key === "Escape" && selectedTaskIds.length > 0) {
+        clearTaskSelection()
+      }
+
+      if ((e.key === "Backspace" || e.key === "Delete") && selectedTaskIds.length > 0) {
+        e.preventDefault()
+        setIsBulkDeleteOpen(true)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [selectedTaskIds, storeLists, selectAllTasks, clearTaskSelection])
+
+  const handleBulkDelete = async () => {
+    setIsBulkProcessing(true)
+    try {
+      for (const id of selectedTaskIds) {
+        await deleteTask(id)
+      }
+      clearTaskSelection()
+      setIsBulkDeleteOpen(false)
+    } finally {
+      setIsBulkProcessing(false)
+    }
+  }
+
+  const handleBulkMove = async (targetListId: string) => {
+    setIsBulkProcessing(true)
+    try {
+      const newLists = storeLists.map((list) => ({
+        ...list,
+        tasks: list.tasks ? [...list.tasks] : [],
+      }))
+
+      const targetList = newLists.find((l) => l.id === targetListId)
+      if (!targetList) return
+
+      let lastPosition =
+        targetList.tasks.length > 0
+          ? targetList.tasks[targetList.tasks.length - 1]?.position
+          : undefined
+
+      const movePromises = []
+
+      for (const taskId of selectedTaskIds) {
+        const sourceList = newLists.find((l) => l.tasks.some((t) => t.id === taskId))
+
+        if (!sourceList || sourceList.id === targetListId) continue
+
+        const taskToMove = sourceList.tasks.find((t) => t.id === taskId)
+        if (!taskToMove) continue
+
+        const { position: newPosition } = calculateFractionalPosition(lastPosition, undefined)
+        lastPosition = newPosition
+
+        sourceList.tasks = sourceList.tasks.filter((t) => t.id !== taskId)
+        targetList.tasks = [
+          ...targetList.tasks,
+          { ...taskToMove, listId: targetListId, position: newPosition },
+        ].sort((a, b) => a.position - b.position)
+
+        movePromises.push(moveTask({ taskId, listId: targetListId, position: newPosition }))
+      }
+
+      setBoardData(projectId, newLists)
+
+      await Promise.all(movePromises)
+
+      clearTaskSelection()
+    } catch (error) {
+    } finally {
+      setIsBulkProcessing(false)
+    }
+  }
+
+  const handleBulkAssign = async (userId: string) => {
+    setIsBulkProcessing(true)
+    try {
+      for (const taskId of selectedTaskIds) {
+        await assignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+      }
+      clearTaskSelection()
+    } finally {
+      setIsBulkProcessing(false)
+    }
+  }
+
   // --- DND-KIT SETUP ---
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
     useSensor(KeyboardSensor)
   )
 
+  const measuring = {
+    droppable: {
+      strategy: MeasuringStrategy.Always,
+    },
+  }
   const listIds = useMemo(() => storeLists.map((l) => `list-${l.id}`), [storeLists])
 
   // --- DND HANDLERS ---
@@ -134,15 +297,11 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
 
     if (type === "list") {
       const list = active.data.current?.list
-      if (list) {
-        setActiveDragItem({ id: active.id as string, type, list })
-      }
+      if (list) setActiveDragItem({ id: active.id as string, type: "list", list })
     }
     if (type === "task") {
       const task = active.data.current?.task
-      if (task) {
-        setActiveDragItem({ id: active.id as string, type, task })
-      }
+      if (task) setActiveDragItem({ id: active.id as string, type: "task", task })
     }
   }
 
@@ -150,75 +309,61 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     const { active, over } = event
     if (!over) return
 
+    const activeType = active.data.current?.type?.toLowerCase()
+    if (activeType !== "task") return
+
     const activeId = active.id as string
     const overId = over.id as string
     if (activeId === overId) return
 
-    const isActiveTask = active.data.current?.type?.toLowerCase() === "task"
-    const isOverTask = over.data.current?.type?.toLowerCase() === "task"
-    const isOverList = over.data.current?.type?.toLowerCase() === "list"
+    const overType = over.data.current?.type?.toLowerCase()
 
-    if (!isActiveTask) return
-
-    // 1. Moving a Task over another Task
-    if (isActiveTask && isOverTask) {
-      const activeListId = active.data.current?.task.listId
-      const overListId = over.data.current?.task.listId
-
-      if (activeListId !== overListId) {
-        const activeListIndex = storeLists.findIndex((l) => l.id === activeListId)
-        const overListIndex = storeLists.findIndex((l) => l.id === overListId)
-
-        if (activeListIndex !== -1 && overListIndex !== -1) {
-          const newLists = [...storeLists]
-          const activeList = { ...newLists[activeListIndex] } as any
-          const overList = { ...newLists[overListIndex] } as any
-
-          const activeTasks = activeList.tasks || []
-          const activeTask = activeTasks.find((t: any) => t.id === activeId)
-
-          if (activeTask) {
-            activeList.tasks = activeTasks.filter((t: any) => t.id !== activeId)
-            overList.tasks = [...(overList.tasks || []), { ...activeTask, listId: overListId }]
-
-            newLists[activeListIndex] = activeList
-            newLists[overListIndex] = overList
-
-            setBoardData(projectId, newLists)
-          }
-        }
+    let activeListId = ""
+    for (const list of storeLists) {
+      if (list.tasks?.some((t) => t.id === activeId)) {
+        activeListId = list.id
+        break
       }
     }
 
-    // 2. Moving a Task into an empty List
-    if (isActiveTask && isOverList) {
-      const activeListId = active.data.current?.task.listId
-      const overListId = overId.replace("list-", "")
-
-      if (activeListId !== overListId) {
-        const activeListIndex = storeLists.findIndex((l) => l.id === activeListId)
-        const overListIndex = storeLists.findIndex((l) => l.id === overListId)
-
-        if (activeListIndex !== -1 && overListIndex !== -1) {
-          const newLists = [...storeLists]
-          const activeList = { ...newLists[activeListIndex] } as any
-          const overList = { ...newLists[overListIndex] } as any
-
-          const activeTasks = activeList.tasks || []
-          const activeTask = activeTasks.find((t: any) => t.id === activeId)
-
-          if (activeTask) {
-            activeList.tasks = activeTasks.filter((t: any) => t.id !== activeId)
-            overList.tasks = [...(overList.tasks || []), { ...activeTask, listId: overListId }]
-
-            newLists[activeListIndex] = activeList
-            newLists[overListIndex] = overList
-
-            setBoardData(projectId, newLists)
-          }
+    let overListId = ""
+    if (overType === "task") {
+      for (const list of storeLists) {
+        if (list.tasks?.some((t) => t.id === overId)) {
+          overListId = list.id
+          break
         }
       }
+    } else if (overType === "list") {
+      overListId = overId.replace("list-", "")
     }
+
+    if (!activeListId || !overListId || activeListId === overListId) return
+
+    const activeListIndex = storeLists.findIndex((l) => l.id === activeListId)
+    const overListIndex = storeLists.findIndex((l) => l.id === overListId)
+    if (activeListIndex === -1 || overListIndex === -1) return
+
+    const newLists = storeLists.map((l) => ({ ...l, tasks: [...(l.tasks || [])] }))
+    const sourceList = newLists[activeListIndex]!
+    const destList = newLists[overListIndex]!
+
+    const taskIndex = sourceList.tasks.findIndex((t) => t.id === activeId)
+    if (taskIndex === -1) return
+    const [movedTask] = sourceList.tasks.splice(taskIndex, 1)
+
+    if (overType === "task") {
+      const overIndex = destList.tasks.findIndex((t) => t.id === overId)
+      const insertIndex = overIndex >= 0 ? overIndex : destList.tasks.length
+      destList.tasks.splice(insertIndex, 0, {
+        ...movedTask,
+        listId: overListId,
+      } as TaskWithAssignees)
+    } else {
+      destList.tasks.push({ ...movedTask, listId: overListId } as TaskWithAssignees)
+    }
+
+    setBoardData(projectId, newLists)
   }
 
   const onDragEnd = (event: DragEndEvent) => {
@@ -231,160 +376,148 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
 
     const activeId = active.id as string
     const overId = over.id as string
-
-    const isActiveList = active.data.current?.type?.toLowerCase() === "list"
-    const isActiveTask = active.data.current?.type?.toLowerCase() === "task"
+    const activeType = active.data.current?.type?.toLowerCase()
 
     // =====================================================
-    // LIST REORDER (UNCHANGED, CLEANED)
+    // LIST REORDER
     // =====================================================
-    if (isActiveList) {
+    if (activeType === "list") {
       const activeListId = activeId.replace("list-", "")
 
+      const overType = over.data.current?.type?.toLowerCase()
+      let targetListId = ""
+      if (overType === "list") {
+        targetListId = overId.replace("list-", "")
+      } else if (overType === "task") {
+        targetListId = over.data.current?.task?.listId
+      }
+
+      if (!targetListId || activeListId === targetListId) {
+        clearActiveDragItem()
+        return
+      }
+
       const oldIndex = storeLists.findIndex((l) => l.id === activeListId)
-      const newIndex = storeLists.findIndex((l) => `list-${l.id}` === overId)
+      const newIndex = storeLists.findIndex((l) => l.id === targetListId)
 
       if (oldIndex === -1 || newIndex === -1) {
         clearActiveDragItem()
         return
       }
 
-      const reordered = [...storeLists]
-      const [moved] = reordered.splice(oldIndex, 1)
-      if (!moved) {
-        clearActiveDragItem()
-        return
-      }
-      reordered.splice(newIndex, 0, moved)
+      const reordered = arrayMove(storeLists, oldIndex, newIndex)
 
-      const prev = reordered[newIndex - 1]?.position
-      const next = reordered[newIndex + 1]?.position
+      // Calculate fractional position
+      const prevList = reordered[newIndex - 1]
+      const nextList = reordered[newIndex + 1]
 
-      const newPosition =
-        prev !== undefined && next !== undefined
-          ? (prev + next) / 2
-          : prev !== undefined
-            ? prev + 65536
-            : next !== undefined
-              ? next / 2
-              : 65536
+      const { position: newPosition } = calculateFractionalPosition(
+        prevList?.position,
+        nextList?.position
+      )
 
-      moveList({
-        listId: activeListId,
-        position: Math.round(newPosition),
-      })
+      // Optimistic update
+      const updatedLists = reordered.map((list) =>
+        list.id === activeListId ? { ...list, position: newPosition } : list
+      )
+      setBoardData(projectId, updatedLists)
 
+      // Backend
+      moveList({ listId: activeListId, position: newPosition })
       clearActiveDragItem()
       return
     }
 
     // =====================================================
-    // TASK MOVE (FULLY REWRITTEN)
+    // TASK REORDER / MOVE
     // =====================================================
-    if (isActiveTask) {
+    if (activeType === "task") {
       const activeTask = active.data.current?.task
       if (!activeTask) {
         clearActiveDragItem()
         return
       }
 
-      const sourceListId = activeTask.listId
+      // Find which list the task is currently in (after onDragOver may have moved it)
+      let currentListId = ""
+      let currentIndex = -1
+      for (const list of storeLists) {
+        const idx = list.tasks?.findIndex((t) => t.id === activeId) ?? -1
+        if (idx !== -1) {
+          currentListId = list.id
+          currentIndex = idx
+          break
+        }
+      }
 
-      const isOverTask = over.data.current?.type?.toLowerCase() === "task"
-      const isOverList = over.data.current?.type?.toLowerCase() === "list"
+      if (!currentListId) {
+        clearActiveDragItem()
+        return
+      }
 
-      let targetListId = ""
+      const overType = over.data.current?.type?.toLowerCase()
 
-      if (isOverTask) {
-        targetListId = over.data.current?.task?.listId
-      } else if (isOverList) {
+      // Determine the target list and the index to insert at
+      let targetListId = currentListId
+      let targetIndex = currentIndex
+
+      if (overType === "task" && overId !== activeId) {
+        // Find the list containing the over task
+        for (const list of storeLists) {
+          const idx = list.tasks?.findIndex((t) => t.id === overId) ?? -1
+          if (idx !== -1) {
+            targetListId = list.id
+            targetIndex = idx
+            break
+          }
+        }
+      } else if (overType === "list") {
         targetListId = overId.replace("list-", "")
+        const targetList = storeLists.find((l) => l.id === targetListId)
+        targetIndex = targetList?.tasks?.length ?? 0
       }
 
-      if (!targetListId) {
-        clearActiveDragItem()
-        return
-      }
-
-      const sourceList = storeLists.find((l) => l.id === sourceListId)
+      // Build the final task order for the target list
       const targetList = storeLists.find((l) => l.id === targetListId)
-
-      if (!sourceList || !targetList) {
+      if (!targetList) {
         clearActiveDragItem()
         return
       }
 
-      // =====================================================
-      // ALWAYS WORK WITH SORTED TASKS (CRITICAL)
-      // =====================================================
-      const sortedTargetTasks = [...(targetList.tasks || [])].sort(
-        (a, b) => a.position - b.position
-      )
+      const sortedTasks = [...(targetList.tasks || [])].sort((a, b) => a.position - b.position)
+      const filteredTasks = sortedTasks.filter((t) => t.id !== activeId)
 
-      // Remove if already exists (important for same-list moves)
-      const filteredTasks = sortedTargetTasks.filter((t) => t.id !== activeId)
+      // Clamp the index
+      const insertIndex = Math.max(0, Math.min(targetIndex, filteredTasks.length))
 
-      let prevPosition: number | undefined
-      let nextPosition: number | undefined
+      // Calculate position based on neighbors
+      const prevTask = filteredTasks[insertIndex - 1]
+      const nextTask = filteredTasks[insertIndex]
 
-      // =====================================================
-      // CASE 1: DROPPED ON A TASK
-      // =====================================================
-      if (isOverTask) {
-        const overTask = over.data.current?.task
-        const overIndex = filteredTasks.findIndex((t) => t.id === overTask.id)
-
-        prevPosition = filteredTasks[overIndex - 1]?.position
-        nextPosition = filteredTasks[overIndex]?.position
-      }
-
-      // =====================================================
-      // CASE 2: DROPPED ON LIST (BOTTOM INSERT - JIRA STYLE)
-      // =====================================================
-      if (isOverList) {
-        prevPosition = filteredTasks[filteredTasks.length - 1]?.position
-        nextPosition = undefined
-      }
-
-      // =====================================================
-      // POSITION CALCULATION (SAFE)
-      // =====================================================
       const { position: newPosition, needsRebalance } = calculateFractionalPosition(
-        prevPosition,
-        nextPosition
+        prevTask?.position,
+        nextTask?.position
       )
-      // =====================================================
-      // OPTIMISTIC UI UPDATE (CLEAN & SAFE)
-      // =====================================================
-      const updatedTargetTasks = [
-        ...filteredTasks,
-        {
-          ...activeTask,
-          listId: targetListId,
-          position: newPosition,
-        },
-      ].sort((a, b) => a.position - b.position)
+
+      // Optimistic UI
+      const updatedTask = { ...activeTask, listId: targetListId, position: newPosition }
 
       const updatedLists = storeLists.map((list) => {
         if (list.id === targetListId) {
-          return { ...list, tasks: updatedTargetTasks }
+          const tasks = list.tasks?.filter((t) => t.id !== activeId) || []
+          tasks.push(updatedTask)
+          tasks.sort((a, b) => a.position - b.position)
+          return { ...list, tasks }
         }
-
-        if (list.id === sourceListId && sourceListId !== targetListId) {
-          return {
-            ...list,
-            tasks: list.tasks?.filter((t) => t.id !== activeId) || [],
-          }
+        if (list.id !== targetListId && list.tasks?.some((t) => t.id === activeId)) {
+          return { ...list, tasks: list.tasks?.filter((t) => t.id !== activeId) || [] }
         }
-
         return list
       })
 
       setBoardData(projectId, updatedLists)
 
-      // =====================================================
-      // BACKEND UPDATE
-      // =====================================================
+      // Backend
       moveTask({
         taskId: activeId,
         listId: targetListId,
@@ -498,8 +631,23 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     return await updateTask(params)
   }
 
-  const handleCreateTask = (listId: string, title: string, priority: string | null) => {
-    createTask({ title, listId, projectId, priority })
+  const handleCreateTask = (
+    listId: string,
+    title: string,
+    priority: string | null,
+    assigneeIds?: string[],
+    dueDate?: Date
+  ) => {
+    const formData = new FormData()
+    formData.append("title", title)
+    formData.append("listId", listId)
+    formData.append("projectId", projectId)
+    if (priority) formData.append("priority", priority)
+    if (dueDate) formData.append("dueDate", dueDate.toISOString())
+    if (assigneeIds && assigneeIds.length > 0) {
+      formData.append("assigneeIds", JSON.stringify(assigneeIds))
+    }
+    createTaskAction(formData)
   }
 
   if (!project) return null
@@ -508,7 +656,8 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
     <>
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={customCollisionDetection}
+        measuring={measuring}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
@@ -530,6 +679,19 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
                 isTaskPending={isTaskPending}
                 onTaskClick={setSelectedTask}
                 onTaskDeleteClick={setTaskToDelete}
+                projectId={project.id}
+                onAssignToggle={(taskId: string, userId: string, isAssigning: boolean) => {
+                  if (isAssigning) {
+                    assignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+                  } else {
+                    unassignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+                  }
+                }}
+                onDueDateChange={(taskId, date) => {
+                  updateTask({ taskId, data: { dueDate: date?.toISOString() || null } })
+                }}
+                selectedTaskIds={selectedTaskIds}
+                onSelectTask={toggleTaskSelection}
               />
             ))}
           </SortableContext>
@@ -635,109 +797,53 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
                 isTaskPending={isTaskPending}
                 onTaskClick={setSelectedTask}
                 onTaskDeleteClick={setTaskToDelete}
+                projectId={project.id}
+                onAssignToggle={(taskId: string, userId: string, isAssigning: boolean) => {
+                  if (isAssigning) {
+                    assignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+                  } else {
+                    unassignTaskAction({ taskId, assigneeUserId: userId }, projectId)
+                  }
+                }}
               />
             </div>
           )}
           {activeDragType === "task" && activeDragTask && (
             <div className="w-[280px] cursor-grabbing text-foreground opacity-80">
-              <TaskCard task={activeDragTask} isOverlay />
+              <TaskCard task={activeDragTask} projectId={activeDragTask.projectId} isOverlay />
             </div>
           )}
         </DragOverlay>
       </DndContext>
 
-      {/* SMART DELETION / TASK MIGRATION MODAL */}
-      <AlertDialog
-        open={!!listToDelete}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) {
-            setListToDelete(null)
-            setMigrationListId("")
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">Delete List</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="text-sm text-muted-foreground">
-                {listToDelete?.taskCount && listToDelete.taskCount > 0 ? (
-                  <div className="mt-2 space-y-4">
-                    <p>
-                      This list contains <strong>{listToDelete.taskCount} tasks</strong>. Deleting
-                      it will also delete those tasks unless you migrate them. Where should we move
-                      them?
-                    </p>
-                    <Select value={migrationListId} onValueChange={setMigrationListId}>
-                      <SelectTrigger className="text-foreground">
-                        <SelectValue placeholder="Select destination list..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {storeLists
-                          .filter((l) => l.id !== listToDelete.id)
-                          .map((l) => (
-                            <SelectItem key={l.id} value={l.id}>
-                              {l.title}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : (
-                  <p className="mt-2">
-                    Are you sure you want to delete the <strong>{listToDelete?.title}</strong> list?
-                    This cannot be undone.
-                  </p>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="text-foreground" disabled={isDeletingList}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                e.preventDefault()
-                confirmDeleteList()
-              }}
-              disabled={
-                isDeletingList ||
-                (listToDelete?.taskCount ? listToDelete.taskCount > 0 && !migrationListId : false)
-              }
-              className="bg-red-600 text-white hover:bg-red-700 disabled:bg-red-600/50"
-            >
-              {isDeletingList ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Delete List"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* FLOATING BULK ACTIONS TOOLBAR */}
+      <BulkActionsToolbar
+        selectedTaskIds={selectedTaskIds}
+        isBulkProcessing={isBulkProcessing}
+        storeLists={storeLists}
+        projectMembers={project?.members || []}
+        onMove={handleBulkMove}
+        onAssign={handleBulkAssign}
+        onDeleteClick={() => setIsBulkDeleteOpen(true)}
+        onClearSelection={clearTaskSelection}
+      />
 
-      <AlertDialog open={!!taskToDelete} onOpenChange={() => setTaskToDelete(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">Delete Task</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
-              Are you sure you want to delete this task? This action cannot be undone and will
-              remove all associated comments and assignments.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="text-foreground">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (taskToDelete) {
-                  deleteTask(taskToDelete)
-                  setTaskToDelete(null)
-                }
-              }}
-              className="bg-red-600 text-white hover:bg-red-700"
-            >
-              Delete Task
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <BoardModals
+        isBulkDeleteOpen={isBulkDeleteOpen}
+        setIsBulkDeleteOpen={setIsBulkDeleteOpen}
+        handleBulkDelete={handleBulkDelete}
+        selectedTaskCount={selectedTaskIds.length}
+        listToDelete={listToDelete}
+        setListToDelete={setListToDelete}
+        migrationListId={migrationListId}
+        setMigrationListId={setMigrationListId}
+        storeLists={storeLists}
+        confirmDeleteList={confirmDeleteList}
+        isDeletingList={isDeletingList}
+        taskToDelete={taskToDelete}
+        setTaskToDelete={setTaskToDelete}
+        deleteTask={deleteTask}
+      />
 
       <TaskSheet
         key={selectedTask?.id || "empty-sheet"}
@@ -749,6 +855,7 @@ export function KanbanBoard({ project, initialLists, currentUserId }: KanbanBoar
         saveAttachments={saveAttachments}
         deleteAttachment={deleteAttachment}
         isDeletingAttachment={isDeletingAttachment}
+        projectId={projectId}
       />
     </>
   )

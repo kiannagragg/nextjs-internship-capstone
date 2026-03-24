@@ -156,3 +156,43 @@
   stroke-dashoffset: 1000;
   animation: draw-line 2s ease-out forwards;
 }
+
+.dark .cl-rootBox {
+  color: #f5f5f5;
+}
+.dark .cl-rootBox h1,
+.dark .cl-rootBox h2,
+.dark .cl-rootBox h3 {
+  color: #f5f5f5;
+}
+.dark .cl-rootBox p,
+.dark .cl-rootBox span,
+.dark .cl-rootBox label {
+  color: #d4d4d4;
+}
+.dark .cl-rootBox [class^="cl-internal-"] {
+  color: inherit;
+}
+
+.dark .cl-navbar h1,
+.dark .cl-navbar p {
+  color: #f5f5f5;
+}
+.dark .cl-navbarButton {
+  color: #d4d4d4;
+}
+.dark .cl-navbarButton[data-active="true"] {
+  color: #f5f5f5;
+}
+
+.dark [class^="cl-"] h1 {
+  color: #f5f5f5;
+}
+.dark [class^="cl-"] p {
+  color: #d4d4d4;
+}
+
+.dark .cl-userProfile-root h1,
+.dark .cl-userProfile-root p {
+  color: #f5f5f5;
+}

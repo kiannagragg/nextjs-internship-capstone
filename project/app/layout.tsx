@@ -1,10 +1,9 @@
-// DONE: Task 2.1 - Set up Clerk authentication service
-// DONE: Task 2.1 - Wrap with ClerkProvider once Clerk is set up
 import type React from "react"
 import type { Metadata } from "next"
 import { DM_Sans, Syne } from "next/font/google"
 import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
+import { ui } from "@clerk/ui"
 import { ThemeProvider } from "@/components/shared/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 
@@ -28,8 +27,24 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ClerkProvider afterSignOutUrl="/">
+    <ClerkProvider ui={ui} afterSignOutUrl="/">
       <html lang="en" suppressHydrationWarning className={`${dmSans.variable} ${syne.variable}`}>
+        <head>
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('theme');
+                  if (theme === 'dark' || theme === 'light') {
+                    document.documentElement.classList.add(theme);
+                  }
+                } catch(e) {}
+              })();
+            `,
+            }}
+          />
+        </head>
         <body className="font-body">
           <ThemeProvider>{children}</ThemeProvider>
           <Toaster />

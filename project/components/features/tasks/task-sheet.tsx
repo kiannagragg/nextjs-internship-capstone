@@ -1,22 +1,10 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import {
-  Loader2,
-  Plus,
-  Paperclip,
-  Tags,
-  X,
-  FileText,
-  ImageIcon,
-  File as FileIcon,
-  ExternalLink,
-  Trash2,
-} from "lucide-react"
+import { Loader2, Paperclip, Tags, X, ExternalLink, Trash2 } from "lucide-react"
 
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select,
   SelectContent,
@@ -26,46 +14,39 @@ import {
 } from "@/components/ui/select"
 import { DatePicker } from "@/components/shared/date-picker"
 import { RichTextEditor } from "@/components/shared/rich-text-editor"
-import { TaskComments } from "./task-comments"
+import { AssigneeSelector, AssigneeAvatars } from "@/components/shared/assignee-selector"
+import { FileIcon } from "@/components/shared/file-icon"
+import { formatFileSize } from "@/lib/utils"
 import { getCurrentDbUserAction } from "@/lib/actions/users"
-import { getTaskByIdAction } from "@/lib/actions/tasks"
-import { TaskActivity } from "./task-activity"
+import { getTaskByIdAction, assignTaskAction, unassignTaskAction } from "@/lib/actions/tasks"
 import { useTaskAttachments } from "@/hooks/use-task-attachments"
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return "0 B"
-  const k = 1024
-  const sizes = ["B", "KB", "MB", "GB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
-}
-
-function getAttachmentIcon(type: string) {
-  if (type.startsWith("image/")) return <ImageIcon className="h-4 w-4 text-blue-500" />
-  if (type === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />
-  return <FileIcon className="h-4 w-4 text-muted-foreground" />
-}
-
-function getFileIcon(file: File) {
-  if (file.type.startsWith("image/")) return <ImageIcon className="h-4 w-4 text-blue-500" />
-  if (file.type === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />
-  return <FileIcon className="h-4 w-4 text-muted-foreground" />
-}
-
+import { TaskActivity } from "./task-activity"
+import { TaskComments } from "./task-comments"
+import type { TaskWithAssignees, User } from "@/types"
 interface TaskSheetProps {
-  task: any | null
+  task: TaskWithAssignees | null
   isOpen: boolean
   onClose: () => void
-  updateTask: (params: { taskId: string; data: any }) => Promise<any>
-  /** From useTasks().saveAttachments — saves metadata to DB after upload */
+  updateTask: (params: {
+    taskId: string
+    data: {
+      title?: string
+      description?: string | null
+      priority?: string | null
+      listId?: string
+      startDate?: Date | string | null
+      dueDate?: Date | string | null
+      labels?: string[]
+    }
+  }) => Promise<unknown>
   saveAttachments: (params: {
     taskId: string
     attachments: { url: string; name: string; size: number; type: string }[]
-  }) => Promise<any>
-  /** From useTasks().deleteAttachment */
-  deleteAttachment: (params: { attachmentId: string; taskId: string }) => Promise<any>
+  }) => Promise<unknown>
+  deleteAttachment: (params: { attachmentId: string; taskId: string }) => Promise<unknown>
   isDeletingAttachment?: boolean
   lists?: { id: string; title: string }[]
+  projectId?: string
 }
 
 export function TaskSheet({
@@ -77,10 +58,10 @@ export function TaskSheet({
   deleteAttachment,
   isDeletingAttachment = false,
   lists = [],
+  projectId,
 }: TaskSheetProps) {
   const queryClient = useQueryClient()
 
-  // useUploadThing lives here (client-only), not in useTasks (SSR-safe)
   const {
     addAttachments,
     deleteAttachment: deleteAttachmentFn,
@@ -95,19 +76,19 @@ export function TaskSheet({
   const [priority, setPriority] = useState<string | null>(task?.priority || null)
   const [listId, setListId] = useState<string>(task?.listId || "")
 
-  const [labels, setLabels] = useState<string[]>(
-    Array.isArray(task?.labels)
-      ? task.labels
-          .map((item: any) => {
-            if (typeof item === "string") return item
-            return item.label?.name || item.label?.title || item.labelId || ""
-          })
-          .filter(Boolean)
-      : []
-  )
+  const [labels, setLabels] = useState<string[]>(() => {
+    if (!Array.isArray(task?.labels)) return []
+    return task.labels
+      .map((item: any) => {
+        if (typeof item === "string") return item
+        return item?.label?.name || item?.name || ""
+      })
+      .filter(Boolean)
+  })
+
   const [labelInput, setLabelInput] = useState("")
 
-  // New file picker state (files to upload on save)
+  // File picker state
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -121,7 +102,6 @@ export function TaskSheet({
   const [isSaving, setIsSaving] = useState(false)
   const [errors, setErrors] = useState<{ title?: string; dates?: string }>({})
 
-  // ── Fetch full task data (with attachments) directly from DB ──
   const { data: fullTask } = useQuery({
     queryKey: ["task-detail", task?.id],
     queryFn: async () => {
@@ -132,7 +112,24 @@ export function TaskSheet({
     enabled: isOpen && !!task?.id,
   })
 
-  // Attachments come from the fresh query, not the stale board prop
+  useEffect(() => {
+    if (fullTask?.labels) {
+      const authoritativeLabels = fullTask.labels
+        .map((item: any) => {
+          if (typeof item === "string") return item
+          return item?.label?.name || item?.name || ""
+        })
+        .filter(Boolean)
+
+      setLabels((prev) => {
+        const isSame =
+          prev.length === authoritativeLabels.length &&
+          prev.every((v, i) => v === authoritativeLabels[i])
+        return isSame ? prev : authoritativeLabels
+      })
+    }
+  }, [fullTask?.labels])
+
   const existingAttachments = fullTask?.attachments || []
 
   const { data: currentUser, isLoading: isUserLoading } = useQuery({
@@ -200,14 +197,12 @@ export function TaskSheet({
     setIsSaving(true)
 
     try {
-      // 1. Upload pending files → UploadThing → save metadata in DB
       if (pendingFiles.length > 0) {
         await addAttachments({ taskId: task.id, files: pendingFiles })
         setPendingFiles([])
         queryClient.invalidateQueries({ queryKey: ["task-detail", task.id] })
       }
 
-      // 2. Save task field updates
       await updateTask({
         taskId: task.id,
         data: {
@@ -374,45 +369,56 @@ export function TaskSheet({
               {/* Existing Attachments (from DB — always fresh via dedicated query) */}
               {existingAttachments.length > 0 && (
                 <div className="max-h-[200px] space-y-1.5 overflow-y-auto rounded-md border border-border p-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5">
-                  {existingAttachments.map((att: any) => {
-                    const canDelete = currentUser?.id === att.uploadedById
-                    return (
-                      <div
-                        key={att.id}
-                        className="group flex items-center justify-between rounded bg-muted/50 px-3 py-2 text-xs"
-                      >
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          {getAttachmentIcon(att.type)}
-                          <span className="max-w-[45%] truncate font-medium text-foreground">
-                            {att.name}
-                          </span>
-                          <span className="text-muted-foreground">{formatFileSize(att.size)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <a
-                            href={att.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                            title="Open file"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                          {canDelete && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteAttachment(att.id)}
-                              disabled={isDeletingAttachment}
-                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                              title="Delete attachment"
+                  {existingAttachments.map(
+                    (att: {
+                      id: string
+                      type: string
+                      name: string
+                      size: number
+                      url: string
+                      uploadedById: string
+                    }) => {
+                      const canDelete = currentUser?.id === att.uploadedById
+                      return (
+                        <div
+                          key={att.id}
+                          className="group flex items-center justify-between rounded bg-muted/50 px-3 py-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <FileIcon type={att.type} />
+                            <span className="max-w-[45%] truncate font-medium text-foreground">
+                              {att.name}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {formatFileSize(att.size)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <a
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                              title="Open file"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(att.id)}
+                                disabled={isDeletingAttachment}
+                                className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                                title="Delete attachment"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    }
+                  )}
                 </div>
               )}
 
@@ -428,7 +434,7 @@ export function TaskSheet({
                       className="flex items-center justify-between rounded bg-blue-500/5 px-3 py-2 text-xs ring-1 ring-blue-500/20"
                     >
                       <div className="flex items-center gap-2 overflow-hidden">
-                        {getFileIcon(file)}
+                        <FileIcon type={file.type} />
                         <span className="max-w-[60%] truncate font-medium text-foreground">
                           {file.name}
                         </span>
@@ -507,17 +513,30 @@ export function TaskSheet({
                 Assignees <span className="font-normal normal-case">(optional)</span>
               </label>
               <div className="flex items-center gap-2">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-black text-xs text-white">KG</AvatarFallback>
-                </Avatar>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 rounded-full px-3 text-foreground"
-                  disabled
-                >
-                  <Plus className="mr-1 h-4 w-4 text-foreground" /> Add
-                </Button>
+                {fullTask?.assignees && fullTask.assignees.length > 0 && (
+                  <AssigneeAvatars assignees={fullTask.assignees} max={5} size="md" />
+                )}
+                {projectId && (
+                  <AssigneeSelector
+                    projectId={projectId}
+                    assignedUserIds={fullTask?.assignees?.map((a: any) => a.user.id) ?? []}
+                    onToggle={async (userId: string, isAssigning: boolean) => {
+                      if (isAssigning) {
+                        await assignTaskAction(
+                          { taskId: task.id, assigneeUserId: userId },
+                          task.projectId
+                        )
+                      } else {
+                        await unassignTaskAction(
+                          { taskId: task.id, assigneeUserId: userId },
+                          task.projectId
+                        )
+                      }
+                      queryClient.invalidateQueries({ queryKey: ["task-detail", task.id] })
+                      queryClient.invalidateQueries({ queryKey: ["project-lists", task.projectId] })
+                    }}
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -541,7 +560,7 @@ export function TaskSheet({
                 <TaskComments
                   taskId={task.id}
                   projectId={task.projectId}
-                  currentUser={currentUser as any}
+                  currentUser={currentUser as User}
                 />
               )}
             </div>

@@ -71,6 +71,19 @@ import {
 import type { ProjectCardData } from "@/types/index"
 import { getProjectsAction } from "@/lib/actions/projects"
 
+function mapToProjectCardData(project: any): ProjectCardData {
+  return {
+    ...project,
+
+    taskCount: project.taskCount ?? project._count?.tasks ?? 0,
+
+    completedTaskCount: project.completedTaskCount ?? project._count?.completedTasks ?? 0,
+
+    isPinned: project.isPinned ?? false,
+    members: project.members ?? [],
+  }
+}
+
 export function useProjects(searchParams?: Record<string, string>) {
   const queryClient = useQueryClient()
   const { toast } = useToast()
@@ -86,18 +99,20 @@ export function useProjects(searchParams?: Record<string, string>) {
     queryFn: async () => {
       const result = await getProjectsAction(searchParams)
       if (!result.success) throw new Error(result.error)
-      return result.data
+      return result.data.map(mapToProjectCardData)
     },
   })
 
   // ✅ Helper: look up a single project's current state from the React Query cache.
   // This lets components like project-header read live cache data instead of stale server props.
   const getProjectFromCache = (projectId: string): ProjectCardData | undefined => {
-    const allQueries = queryClient.getQueriesData<ProjectCardData[]>({ queryKey: ["projects"] })
+    const allQueries = queryClient.getQueriesData<any[]>({ queryKey: ["projects"] })
+
     for (const [, data] of allQueries) {
       const found = data?.find((p) => p.id === projectId)
-      if (found) return found
+      if (found) return mapToProjectCardData(found) // ✅ normalize again
     }
+
     return undefined
   }
 
@@ -125,7 +140,7 @@ export function useProjects(searchParams?: Record<string, string>) {
       await queryClient.cancelQueries({ queryKey: ["projects"] })
       const previousProjects = queryClient.getQueryData(["projects"])
 
-      queryClient.setQueryData(["projects"], (old: any) =>
+      queryClient.setQueryData(["projects"], (old: ProjectCardData[] = []) =>
         old?.map((p: any) => (p.id === id ? { ...p, title: data.get("title") } : p))
       )
       return { previousProjects }
@@ -152,7 +167,9 @@ export function useProjects(searchParams?: Record<string, string>) {
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["projects"] })
       const previousProjects = queryClient.getQueryData(["projects"])
-      queryClient.setQueryData(["projects"], (old: any) => old?.filter((p: any) => p.id !== id))
+      queryClient.setQueryData(["projects"], (old: ProjectCardData[] = []) =>
+        old?.filter((p: any) => p.id !== id)
+      )
       return { previousProjects }
     },
     onSuccess: (result) => {
@@ -176,7 +193,7 @@ export function useProjects(searchParams?: Record<string, string>) {
       const previousProjects = queryClient.getQueryData(["projects"])
 
       // Optimistic: flip to what the server will set
-      queryClient.setQueryData(["projects"], (old: any) =>
+      queryClient.setQueryData(["projects"], (old: ProjectCardData[] = []) =>
         old?.map((p: any) => (p.id === id ? { ...p, isPinned: !currentPinState } : p))
       )
       return { previousProjects }

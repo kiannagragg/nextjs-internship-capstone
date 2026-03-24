@@ -4,8 +4,14 @@ const baseTaskSchema = z.object({
   title: z.string().min(1, "Title is required"),
   description: z.string().optional().nullable(),
   priority: z.enum(["low", "medium", "high"]).optional().nullable(),
-  startDate: z.date().optional().nullable(),
-  dueDate: z.date().optional().nullable(),
+  startDate: z.preprocess(
+    (arg) => (typeof arg === "string" ? new Date(arg) : arg),
+    z.date().optional().nullable()
+  ),
+  dueDate: z.preprocess(
+    (arg) => (typeof arg === "string" ? new Date(arg) : arg),
+    z.date().optional().nullable()
+  ),
   listId: z.string(),
   projectId: z.string(),
 })
@@ -31,8 +37,10 @@ export const updateTaskSchema = baseTaskSchema
     startDate: true,
     dueDate: true,
   })
+  .partial()
   .extend({
     isCompleted: z.boolean().optional(),
+    labels: z.array(z.string()).optional(),
   })
   .refine(
     (data) => {

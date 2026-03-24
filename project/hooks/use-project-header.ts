@@ -84,11 +84,13 @@ export function useProjectHeaderLogic(project: ProjectCardData, isPinned?: boole
   }
 
   // --- Derived View Data ---
-  const calculateProgress = (counts?: { tasks?: number; completedTasks?: number }) => {
-    const total = counts?.tasks || 0
-    const completed = counts?.completedTasks || 0
-    const percent = total === 0 ? 0 : Math.round((completed / total) * 100)
-    return { total, completed, percent }
+  const calculateProgress = (total?: number, completed?: number) => {
+    const safeTotal = total ?? 0
+    const safeCompleted = completed ?? 0
+
+    const percent = safeTotal === 0 ? 0 : Math.round((safeCompleted / safeTotal) * 100)
+
+    return { total: safeTotal, completed: safeCompleted, percent }
   }
 
   const getTimeAgo = (dateString: Date | string | null) => {
@@ -105,7 +107,10 @@ export function useProjectHeaderLogic(project: ProjectCardData, isPinned?: boole
 
   const activeProject = cachedProject || project
 
-  const progressData = calculateProgress(activeProject._count)
+  const progressData = calculateProgress(
+    activeProject.taskCount ?? 0,
+    activeProject.completedTaskCount ?? 0
+  )
   const updatedText = getTimeAgo(activeProject.updatedAt)
   const dueDateText = activeProject.dueDate
     ? new Date(activeProject.dueDate).toLocaleDateString("en-US", {

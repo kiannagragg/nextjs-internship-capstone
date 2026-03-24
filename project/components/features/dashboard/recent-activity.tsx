@@ -2,10 +2,9 @@ import Link from "next/link"
 import { requireAuth } from "@/lib/auth"
 import { getActivityForUser } from "@/lib/db/queries/activity"
 import { timeAgo } from "@/lib/utils"
+import { UserAvatar } from "@/components/shared/user-avatar"
 
 // --- Types ---
-
-// 1. Strictly type the actions based on your switch statement
 type ActivityAction =
   | "created"
   | "updated"
@@ -22,25 +21,32 @@ type ActivityAction =
   | "removed"
   | "role_changed"
 
-// 2. Define the expected shape of the JSON metadata
 interface ActivityMetadata {
   title?: string
   taskTitle?: string
   to?: string
+  from?: string
+  toColor?: string
+  fromColor?: string
   role?: string
   newRole?: string
-  [key: string]: any // Allows flexibility for other JSON properties
+  email?: string
+  memberName?: string
+  assigneeName?: string
+  assigneeId?: string
+  type?: string
+  fileName?: string
+  fileNames?: string[]
+  count?: number
+  viaInvitation?: boolean
+  accepted?: boolean
+  listType?: string
+  wasCompleted?: boolean
+  fields?: string[]
+  [key: string]: any
 }
 
 // --- Helper Functions ---
-
-function getInitials(firstName: string | null, lastName: string | null) {
-  const first = firstName?.[0] || ""
-  const last = lastName?.[0] || ""
-  return (first + last).toUpperCase() || "U"
-}
-
-// 3. Apply the types to the function parameters
 function formatActivityMessage(
   action: ActivityAction | string,
   entityType: string,
@@ -50,38 +56,89 @@ function formatActivityMessage(
 
   switch (action) {
     case "created":
+      if (entityType === "task") return `created task "${title}"`
+      if (entityType === "list") return `created list "${title}"`
+      if (entityType === "project") return `created project "${title}"`
+      if (metadata?.type === "calendar_event") return `created event "${title}"`
       return `created ${entityType} "${title}"`
+
     case "updated":
+      if (metadata?.type === "attachments_added") {
+        const count = metadata.count || metadata.fileNames?.length || 0
+        const fileNames = metadata.fileNames || []
+        if (count === 1 && fileNames.length === 1) return `attached "${fileNames[0]}" to a task`
+        return `attached ${count} file${count !== 1 ? "s" : ""} to a task`
+      }
+      if (metadata?.type === "attachment_deleted") {
+        return `removed attachment "${metadata.fileName || "a file"}"`
+      }
+      if (entityType === "task") return `updated task "${title}"`
+      if (entityType === "project") return `updated project "${title}"`
       return `updated ${entityType} "${title}"`
+
     case "deleted":
+      if (entityType === "task") return `deleted task "${title}"`
+      if (entityType === "list") return `deleted list "${title}"`
+      if (entityType === "project") return `deleted project "${title}"`
+      if (entityType === "comment") return `deleted a comment`
       return `deleted ${entityType} "${title}"`
+
     case "moved":
-      return `moved "${title}" to ${metadata?.to || "another list"}`
+      if (metadata?.from && metadata?.to) {
+        return `moved "${metadata.taskTitle || title}" from ${metadata.from} to ${metadata.to}`
+      }
+      return `moved "${title}" to another list`
+
     case "completed":
-      return `completed task "${title}"`
+      return `completed "${title}"`
+
     case "restored":
-      return `restored task "${title}"`
+      return `reopened "${title}"`
+
     case "assigned":
-      return `assigned task "${title}"`
+      if (metadata?.assigneeName) {
+        return `assigned ${metadata.assigneeName} to "${metadata.taskTitle || title}"`
+      }
+      return `assigned someone to "${title}"`
+
     case "unassigned":
-      return `unassigned from "${title}"`
+      if (metadata?.assigneeName) {
+        return `removed ${metadata.assigneeName} from "${metadata.taskTitle || title}"`
+      }
+      return `removed an assignee from "${title}"`
+
     case "commented":
-      return `commented on "${title}"`
+      if (metadata?.taskTitle) {
+        return `commented on "${metadata.taskTitle}"`
+      }
+      return `added a comment`
+
     case "invited":
-      return `invited a new member as ${metadata?.role}`
+      if (metadata?.email) return `invited ${metadata.email} as ${metadata.role || "member"}`
+      if (metadata?.viaInvitation && metadata?.accepted) return `joined the project`
+      return `invited a new member${metadata?.role ? ` as ${metadata.role}` : ""}`
+
     case "removed":
+      if (metadata?.memberName) return `removed ${metadata.memberName} from the project`
       return `removed a member`
+
     case "role_changed":
-      return `changed a member's role to ${metadata?.newRole}`
+      if (metadata?.memberName && metadata?.from && metadata?.to) {
+        return `changed ${metadata.memberName}'s role from ${metadata.from} to ${metadata.to}`
+      }
+      if (metadata?.newRole) return `changed a member's role to ${metadata.newRole}`
+      return `changed a member's role`
+
     case "archived":
-      return `archived ${entityType} "${title}"`
+      return `archived "${title}"`
+
     case "unarchived":
-      return `unarchived ${entityType} "${title}"`
+      return `restored "${title}" from archive`
+
     default:
       return `modified a ${entityType}`
   }
 }
-
 // --- Server Component ---
 
 export async function RecentActivity() {
@@ -93,10 +150,12 @@ export async function RecentActivity() {
       {/* Header */}
       <div className="mb-4 flex items-center justify-between">
         <h2 className="font-display text-base font-semibold text-foreground">Recent Activity</h2>
-        {/*<button className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
+        <Link
+          href="/activity"
+          className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
           View All
-        </button>
-        */}
+        </Link>
       </div>
 
       {/* Scrollable list */}
@@ -107,7 +166,6 @@ export async function RecentActivity() {
           {activities.map((activity) => {
             const userName =
               `${activity.user.firstName || "Unknown"} ${activity.user.lastName || "User"}`.trim()
-            const initials = getInitials(activity.user.firstName, activity.user.lastName)
 
             // 4. Cast the metadata to our new type when passing it to the helper
             const actionMessage = formatActivityMessage(
@@ -124,9 +182,7 @@ export async function RecentActivity() {
               >
                 <div className="flex items-start gap-3">
                   {/* Avatar */}
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                    {initials}
-                  </div>
+                  <UserAvatar user={activity.user} size="sm" />
 
                   <div className="min-w-0 flex-1">
                     <p className="text-sm">

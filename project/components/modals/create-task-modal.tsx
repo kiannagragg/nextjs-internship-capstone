@@ -2,11 +2,12 @@
 
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, X, Paperclip, FileText, ImageIcon, File as FileIcon } from "lucide-react"
+import { Loader2, X, Paperclip } from "lucide-react"
 
 import { useUIStore } from "@/stores/ui-store"
 import { useProjects } from "@/hooks/use-projects"
 import { useQuery } from "@tanstack/react-query"
+import { formatFileSize } from "@/lib/utils"
 import { getProjectListsAction } from "@/lib/actions/lists"
 import { useGlobalTaskCreator } from "@/hooks/use-global-task"
 
@@ -27,22 +28,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { AssigneeSelector } from "@/components/shared/assignee-selector"
 import { DatePicker } from "@/components/shared/date-picker"
+import { FileIcon } from "@/components/shared/file-icon"
 import { RichTextEditor } from "@/components/shared/rich-text-editor"
-
-function formatFileSize(bytes: number): string {
-  if (bytes === 0) return "0 B"
-  const k = 1024
-  const sizes = ["B", "KB", "MB", "GB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
-}
-
-function getFileIcon(file: File) {
-  if (file.type.startsWith("image/")) return <ImageIcon className="h-4 w-4 text-blue-500" />
-  if (file.type === "application/pdf") return <FileText className="h-4 w-4 text-red-500" />
-  return <FileIcon className="h-4 w-4 text-muted-foreground" />
-}
 
 export function CreateTaskModal() {
   const { isCreateTaskModalOpen, closeCreateTaskModal } = useUIStore()
@@ -71,6 +60,8 @@ export function CreateTaskModal() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [dueDateError, setDueDateError] = useState<string | null>(null)
+
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([])
 
   // Fetch lists dynamically
   const { data: projectLists = [], isLoading: isLoadingLists } = useQuery({
@@ -123,6 +114,7 @@ export function CreateTaskModal() {
     setLabelInput("")
     setFiles([])
     setDueDateError(null)
+    setAssigneeIds([])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -145,6 +137,7 @@ export function CreateTaskModal() {
     if (startDate) formData.append("startDate", startDate.toISOString())
     if (dueDate) formData.append("dueDate", dueDate.toISOString())
     formData.append("labels", JSON.stringify(labels))
+    formData.append("assigneeIds", JSON.stringify(assigneeIds))
 
     // Pass files separately — hook uploads them via uploadthing first
     createGlobalTask.mutate(
@@ -215,6 +208,7 @@ export function CreateTaskModal() {
                 onValueChange={(value) => {
                   setProjectId(value)
                   setListId("")
+                  setAssigneeIds([])
                 }}
                 disabled={isLoadingProjects || isBusy}
               >
@@ -328,6 +322,44 @@ export function CreateTaskModal() {
             />
           </div>
 
+          {/* Assignees */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-foreground">Assignees</label>
+            <div className="flex items-center gap-2">
+              {assigneeIds.length > 0 && (
+                <div className="flex -space-x-1.5">
+                  {assigneeIds.map((id) => (
+                    <div
+                      key={id}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-background bg-foreground text-xs font-bold text-background"
+                    >
+                      {id.slice(0, 2).toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {projectId && (
+                <AssigneeSelector
+                  projectId={projectId}
+                  assignedUserIds={assigneeIds}
+                  onToggle={(userId: string, isAssigning: boolean) => {
+                    if (isAssigning) {
+                      setAssigneeIds((prev) => [...prev, userId])
+                    } else {
+                      setAssigneeIds((prev) => prev.filter((id) => id !== userId))
+                    }
+                  }}
+                  disabled={isBusy}
+                />
+              )}
+            </div>
+            {!projectId && (
+              <p className="text-xs text-muted-foreground">
+                Select a project first to assign members
+              </p>
+            )}
+          </div>
+
           {/* Attachments */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-foreground">Attachments</label>
@@ -358,7 +390,7 @@ export function CreateTaskModal() {
                     className="flex items-center justify-between rounded bg-muted/50 p-2 text-xs text-foreground"
                   >
                     <div className="flex items-center gap-2 overflow-hidden">
-                      {getFileIcon(file)}
+                      <FileIcon type={file.type} />
                       <span className="max-w-[60%] truncate">{file.name}</span>
                       <span className="text-muted-foreground">{formatFileSize(file.size)}</span>
                     </div>

@@ -23,23 +23,37 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
+import { AssigneeSelector } from "@/components/shared/assignee-selector"
+import { DatePicker } from "@/components/shared/date-picker"
 import { TaskCard } from "@/components/features/tasks/task-card"
+import type { ListWithTasks, TaskWithAssignees } from "@/types"
 
 const PRESET_COLORS = ["#2D6EF7", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#64748B"]
 
 interface ListColumnProps {
-  list: any
+  list: ListWithTasks
   canModifyBoard: boolean
   hasDoneList: boolean
   doneListsCount: number
   currentUserId: string
   isOverlay?: boolean
-  onEditList: (id: string, data: any) => Promise<void>
-  onDeleteClick: (list: any) => void
-  onCreateTask: (listId: string, title: string, priority: string | null) => void
+  onEditList: (id: string, data: { title: string; color: string; type: string }) => Promise<void>
+  onDeleteClick: (list: ListWithTasks) => void
+  onCreateTask: (
+    listId: string,
+    title: string,
+    priority: string | null,
+    assigneeIds?: string[],
+    dueDate?: Date
+  ) => void
   isTaskPending: boolean
-  onTaskClick: (task: any) => void
+  onTaskClick: (task: TaskWithAssignees) => void
   onTaskDeleteClick: (taskId: string) => void
+  projectId: string
+  onAssignToggle?: (taskId: string, userId: string, isAssigning: boolean) => void
+  onDueDateChange?: (taskId: string, date: Date | undefined) => void
+  selectedTaskIds?: string[]
+  onSelectTask?: (taskId: string, multi: boolean) => void
 }
 
 export function ListColumn({
@@ -55,6 +69,11 @@ export function ListColumn({
   isTaskPending,
   onTaskClick,
   onTaskDeleteClick,
+  projectId,
+  onAssignToggle,
+  onDueDateChange,
+  selectedTaskIds = [],
+  onSelectTask,
 }: ListColumnProps) {
   // --- DND-KIT HOOK ---
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
@@ -63,25 +82,27 @@ export function ListColumn({
   })
 
   const taskIds = useMemo(() => {
-    return list.tasks?.map((t: any) => t.id) || []
+    return list.tasks?.map((t: TaskWithAssignees) => t.id) || []
   }, [list.tasks])
 
   // Prevent interactions while dragging
   const style = {
     transition,
     transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.3 : 1, // Dim the original column while dragging it
+    opacity: isDragging ? 0.3 : 1,
   }
 
   // --- LOCAL UI STATE ---
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(list.title)
-  const [editColor, setEditColor] = useState(list.color || PRESET_COLORS[0])
-  const [editType, setEditType] = useState(list.type || "custom")
+  const [editColor, setEditColor] = useState<string>(list.color || PRESET_COLORS[0] || "#2D6EF7")
+  const [editType, setEditType] = useState<string>(list.type || "custom")
 
   const [isAddingTask, setIsAddingTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState("")
   const [newTaskPriority, setNewTaskPriority] = useState<string | null>(null)
+  const [newTaskAssigneeIds, setNewTaskAssigneeIds] = useState<string[]>([])
+  const [newTaskDueDate, setNewTaskDueDate] = useState<Date | undefined>()
 
   const taskInputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -99,9 +120,11 @@ export function ListColumn({
 
   const handleSaveTask = () => {
     if (!newTaskTitle.trim()) return
-    onCreateTask(list.id, newTaskTitle.trim(), newTaskPriority)
+    onCreateTask(list.id, newTaskTitle.trim(), newTaskPriority, newTaskAssigneeIds, newTaskDueDate)
     setNewTaskTitle("")
     setNewTaskPriority(null)
+    setNewTaskAssigneeIds([])
+    setNewTaskDueDate(undefined)
     setIsAddingTask(false)
   }
 
@@ -118,9 +141,8 @@ export function ListColumn({
 
   const isOnlyDoneList = list.type === "done" && doneListsCount <= 1
   const canDeleteThisList =
-    !isOnlyDoneList && canModifyBoard && (list.createdById === currentUserId || canModifyBoard) // Adjust based on your actual admin check
+    !isOnlyDoneList && canModifyBoard && (list.createdById === currentUserId || canModifyBoard)
 
-  // If this is the floating overlay, we strip the DND hooks and just render it normally with a highlight
   if (isOverlay) {
     return (
       <div className="flex max-h-full w-80 flex-shrink-0 rotate-2 flex-col rounded-xl border bg-secondary/30 opacity-90 shadow-xl ring-2 ring-primary">
@@ -146,7 +168,6 @@ export function ListColumn({
           onSubmit={handleSaveEdit}
           className="rounded-t-xl border-b bg-background p-3 shadow-sm"
         >
-          {/* Your exact editing form from previous code */}
           <Input
             autoFocus
             value={editTitle}
@@ -194,7 +215,6 @@ export function ListColumn({
           </div>
         </form>
       ) : (
-        // DRAG HANDLE 👇
         <div
           {...attributes}
           {...listeners}
@@ -221,7 +241,6 @@ export function ListColumn({
 
           {canModifyBoard && (
             <DropdownMenu>
-              {/* onPointerDown={(e) => e.stopPropagation()} stops the drag event when clicking the menu! */}
               <DropdownMenuTrigger asChild onPointerDown={(e) => e.stopPropagation()}>
                 <Button
                   variant="ghost"
@@ -260,12 +279,17 @@ export function ListColumn({
       {/* TASKS AREA */}
       <div className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden px-2 pb-2 pt-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-          {list.tasks?.map((task: any) => (
+          {list.tasks?.map((task: TaskWithAssignees) => (
             <TaskCard
               key={task.id}
               task={task}
+              projectId={projectId}
               onClick={(t) => onTaskClick(t)}
               onDelete={(taskId) => onTaskDeleteClick(taskId)}
+              onAssignToggle={onAssignToggle}
+              onDueDateChange={onDueDateChange}
+              isSelected={selectedTaskIds.includes(task.id)}
+              onSelect={onSelectTask}
             />
           ))}
         </SortableContext>
@@ -274,32 +298,86 @@ export function ListColumn({
           <div className="mt-2 rounded-lg border bg-background p-2 shadow-sm">
             <Textarea
               ref={taskInputRef}
-              placeholder="Enter a title for this card..."
+              placeholder="Enter task title…"
               value={newTaskTitle}
               onChange={(e) => setNewTaskTitle(e.target.value)}
               onKeyDown={handleTaskKeyDown}
               className="min-h-[60px] resize-none border-none bg-transparent p-1 text-sm text-foreground shadow-none focus-visible:ring-0"
             />
-            <div className="mt-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={handleSaveTask}
-                  disabled={isTaskPending || !newTaskTitle.trim()}
-                >
-                  {isTaskPending ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : "Add Task"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs text-foreground"
-                  onClick={() => setIsAddingTask(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
+
+            {/* Inline selectors row */}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {/* Priority */}
+              <Select
+                value={newTaskPriority || "none"}
+                onValueChange={(val) => setNewTaskPriority(val === "none" ? null : val)}
+              >
+                <SelectTrigger className="flex h-7 w-[95px] items-center gap-1 rounded-md border border-input px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                  <SelectValue placeholder="Priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Priority</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Due Date */}
+              <DatePicker
+                value={newTaskDueDate}
+                onChange={setNewTaskDueDate}
+                placeholder="Due date"
+                className="flex h-7 w-auto min-w-[95px] items-center gap-1 rounded-md border border-input px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              />
+
+              {/* Assignees */}
+              <AssigneeSelector
+                projectId={projectId}
+                assignedUserIds={newTaskAssigneeIds}
+                onToggle={(userId: string, isAssigning: boolean) => {
+                  if (isAssigning) {
+                    setNewTaskAssigneeIds((prev) => [...prev, userId])
+                  } else {
+                    setNewTaskAssigneeIds((prev) => prev.filter((id) => id !== userId))
+                  }
+                }}
+                trigger={
+                  <button className="flex h-7 items-center gap-1 rounded-md border border-input px-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                    <Plus size={12} />
+                    {newTaskAssigneeIds.length > 0
+                      ? `${newTaskAssigneeIds.length} assigned`
+                      : "Assign"}
+                  </button>
+                }
+              />
+            </div>
+
+            {/* Action buttons */}
+            <div className="mt-2 flex items-center gap-2">
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={handleSaveTask}
+                disabled={isTaskPending || !newTaskTitle.trim()}
+              >
+                {isTaskPending ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : "Add Task"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs text-foreground"
+                onClick={() => {
+                  setIsAddingTask(false)
+                  setNewTaskTitle("")
+                  setNewTaskPriority(null)
+                  setNewTaskAssigneeIds([])
+                  setNewTaskDueDate(undefined)
+                }}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
         )}

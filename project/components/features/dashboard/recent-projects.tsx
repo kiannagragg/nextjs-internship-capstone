@@ -1,24 +1,9 @@
 import Link from "next/link"
 import { requireAuth } from "@/lib/auth"
 import { getRecentProjects } from "@/lib/db/queries/dashboard"
-
-// --- Helper Functions ---
-
-function getInitials(firstName?: string | null, lastName?: string | null) {
-  const first = firstName?.[0] || ""
-  const last = lastName?.[0] || ""
-  return (first + last).toUpperCase() || "U"
-}
-
-function formatTimeAgo(date: Date) {
-  const now = new Date()
-  const diffInSeconds = Math.floor((now.getTime() - new Date(date).getTime()) / 1000)
-
-  if (diffInSeconds < 60) return "Just now"
-  if (diffInSeconds < 3600) return `Last updated ${Math.floor(diffInSeconds / 60)} mins ago`
-  if (diffInSeconds < 86400) return `Last updated ${Math.floor(diffInSeconds / 3600)} hrs ago`
-  return `Last updated ${Math.floor(diffInSeconds / 86400)} days ago`
-}
+import { StackedAvatars } from "@/components/shared/user-avatar"
+import { ProgressBar } from "@/components/shared/progress-bar"
+import { timeAgo } from "@/lib/utils"
 
 export async function RecentProjects() {
   const { dbUserId: userId } = await requireAuth()
@@ -42,13 +27,6 @@ export async function RecentProjects() {
       ) : (
         <div className="space-y-4">
           {projects.map((project) => {
-            // Calculate progress percentage
-            const progress =
-              project._count.tasks === 0
-                ? 0
-                : Math.round((project._count.completedTasks / project._count.tasks) * 100)
-
-            // Badge Color Maps
             const priorityStyles = {
               high: "bg-red-500/10 text-red-600 dark:text-red-400",
               medium: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
@@ -74,29 +52,18 @@ export async function RecentProjects() {
                   />
                   <div>
                     <h3 className="text-sm font-semibold text-foreground">{project.title}</h3>
-                    <p className="text-xs text-muted-foreground">
-                      {formatTimeAgo(new Date(project.updatedAt))}
-                    </p>
+                    <p className="text-xs text-muted-foreground">{timeAgo(project.updatedAt)}</p>
                   </div>
                 </div>
 
                 {/* Right Side: Progress, Badges, Members */}
                 <div className="flex items-center gap-6">
-                  {/* Progress Bar */}
-                  <div className="flex items-center gap-3">
-                    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{
-                          backgroundColor: project.color || "#2D6EF7",
-                          width: `${progress}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="w-8 text-right text-xs font-medium text-foreground">
-                      {progress}%
-                    </span>
-                  </div>
+                  <ProgressBar
+                    counts={project._count}
+                    color={project.color}
+                    showFraction={false}
+                    size="sm"
+                  />
 
                   {/* Status & Priority Badges (Hidden on tiny screens) */}
                   <div className="hidden items-center gap-2 md:flex">
@@ -116,21 +83,12 @@ export async function RecentProjects() {
                   </div>
 
                   {/* Member Avatars (Hidden on small screens) */}
-                  <div className="hidden items-center -space-x-1.5 lg:flex">
-                    {project.members.slice(0, 4).map((member) => (
-                      <div
-                        key={member.user.id}
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-background bg-foreground text-[9px] font-bold text-background ring-1 ring-border"
-                        title={`${member.user.firstName} ${member.user.lastName}`}
-                      >
-                        {getInitials(member.user.firstName, member.user.lastName)}
-                      </div>
-                    ))}
-                    {project.members.length > 4 && (
-                      <div className="bg-surface-hover flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-background text-[9px] font-bold text-muted-foreground ring-1 ring-border">
-                        +{project.members.length - 4}
-                      </div>
-                    )}
+                  <div className="hidden lg:flex">
+                    <StackedAvatars
+                      users={project.members.map((m: any) => ({ user: m.user }))}
+                      max={4}
+                      size="sm"
+                    />
                   </div>
                 </div>
               </Link>
