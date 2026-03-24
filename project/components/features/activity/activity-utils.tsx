@@ -116,7 +116,7 @@ export function formatActivityMessage(
       if (metadata?.from && metadata?.to) {
         return `moved "${metadata.taskTitle || title}" from ${metadata.from} to ${metadata.to}`
       }
-      return `moved "${title}" to another list`
+      return `moved "${title}" list`
 
     case "completed":
       return `completed "${title}"`

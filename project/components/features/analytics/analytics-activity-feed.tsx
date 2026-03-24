@@ -2,15 +2,11 @@
 
 import { useState, useMemo } from "react"
 import { Activity } from "lucide-react"
-import { timeAgo } from "@/lib/utils"
+import { timeAgo, getFullName } from "@/lib/utils"
 import { UserAvatar } from "@/components/shared/user-avatar"
 import type { ActivityLogEntry } from "@/types/analytics"
 
 /* ==================== HELPERS ==================== */
-
-function getFullName(user: any) {
-  return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Unknown"
-}
 
 function getActivityDescription(log: ActivityLogEntry) {
   const name = getFullName(log.user)

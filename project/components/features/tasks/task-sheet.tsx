@@ -1,4 +1,4 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Loader2, Paperclip, Tags, X, ExternalLink, Trash2 } from "lucide-react"
 
@@ -22,16 +22,28 @@ import { getTaskByIdAction, assignTaskAction, unassignTaskAction } from "@/lib/a
 import { useTaskAttachments } from "@/hooks/use-task-attachments"
 import { TaskActivity } from "./task-activity"
 import { TaskComments } from "./task-comments"
+import type { TaskWithAssignees, User } from "@/types"
 interface TaskSheetProps {
-  task: any | null
+  task: TaskWithAssignees | null
   isOpen: boolean
   onClose: () => void
-  updateTask: (params: { taskId: string; data: any }) => Promise<any>
+  updateTask: (params: {
+    taskId: string
+    data: {
+      title?: string
+      description?: string | null
+      priority?: string | null
+      listId?: string
+      startDate?: Date | string | null
+      dueDate?: Date | string | null
+      labels?: string[]
+    }
+  }) => Promise<unknown>
   saveAttachments: (params: {
     taskId: string
     attachments: { url: string; name: string; size: number; type: string }[]
-  }) => Promise<any>
-  deleteAttachment: (params: { attachmentId: string; taskId: string }) => Promise<any>
+  }) => Promise<unknown>
+  deleteAttachment: (params: { attachmentId: string; taskId: string }) => Promise<unknown>
   isDeletingAttachment?: boolean
   lists?: { id: string; title: string }[]
   projectId?: string
@@ -64,16 +76,16 @@ export function TaskSheet({
   const [priority, setPriority] = useState<string | null>(task?.priority || null)
   const [listId, setListId] = useState<string>(task?.listId || "")
 
-  const [labels, setLabels] = useState<string[]>(
-    Array.isArray(task?.labels)
-      ? task.labels
-          .map((item: any) => {
-            if (typeof item === "string") return item
-            return item.label?.name || item.label?.title || item.labelId || ""
-          })
-          .filter(Boolean)
-      : []
-  )
+  const [labels, setLabels] = useState<string[]>(() => {
+    if (!Array.isArray(task?.labels)) return []
+    return task.labels
+      .map((item: any) => {
+        if (typeof item === "string") return item
+        return item?.label?.name || item?.name || ""
+      })
+      .filter(Boolean)
+  })
+
   const [labelInput, setLabelInput] = useState("")
 
   // File picker state
@@ -99,6 +111,24 @@ export function TaskSheet({
     },
     enabled: isOpen && !!task?.id,
   })
+
+  useEffect(() => {
+    if (fullTask?.labels) {
+      const authoritativeLabels = fullTask.labels
+        .map((item: any) => {
+          if (typeof item === "string") return item
+          return item?.label?.name || item?.name || ""
+        })
+        .filter(Boolean)
+
+      setLabels((prev) => {
+        const isSame =
+          prev.length === authoritativeLabels.length &&
+          prev.every((v, i) => v === authoritativeLabels[i])
+        return isSame ? prev : authoritativeLabels
+      })
+    }
+  }, [fullTask?.labels])
 
   const existingAttachments = fullTask?.attachments || []
 
@@ -339,45 +369,56 @@ export function TaskSheet({
               {/* Existing Attachments (from DB — always fresh via dedicated query) */}
               {existingAttachments.length > 0 && (
                 <div className="max-h-[200px] space-y-1.5 overflow-y-auto rounded-md border border-border p-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted hover:[&::-webkit-scrollbar-thumb]:bg-muted-foreground/50 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5">
-                  {existingAttachments.map((att: any) => {
-                    const canDelete = currentUser?.id === att.uploadedById
-                    return (
-                      <div
-                        key={att.id}
-                        className="group flex items-center justify-between rounded bg-muted/50 px-3 py-2 text-xs"
-                      >
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <FileIcon type={att.type} />
-                          <span className="max-w-[45%] truncate font-medium text-foreground">
-                            {att.name}
-                          </span>
-                          <span className="text-muted-foreground">{formatFileSize(att.size)}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <a
-                            href={att.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                            title="Open file"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                          {canDelete && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteAttachment(att.id)}
-                              disabled={isDeletingAttachment}
-                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                              title="Delete attachment"
+                  {existingAttachments.map(
+                    (att: {
+                      id: string
+                      type: string
+                      name: string
+                      size: number
+                      url: string
+                      uploadedById: string
+                    }) => {
+                      const canDelete = currentUser?.id === att.uploadedById
+                      return (
+                        <div
+                          key={att.id}
+                          className="group flex items-center justify-between rounded bg-muted/50 px-3 py-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <FileIcon type={att.type} />
+                            <span className="max-w-[45%] truncate font-medium text-foreground">
+                              {att.name}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {formatFileSize(att.size)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <a
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                              title="Open file"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(att.id)}
+                                disabled={isDeletingAttachment}
+                                className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                                title="Delete attachment"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    }
+                  )}
                 </div>
               )}
 
@@ -519,7 +560,7 @@ export function TaskSheet({
                 <TaskComments
                   taskId={task.id}
                   projectId={task.projectId}
-                  currentUser={currentUser as any}
+                  currentUser={currentUser as User}
                 />
               )}
             </div>

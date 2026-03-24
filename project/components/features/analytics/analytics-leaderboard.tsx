@@ -1,12 +1,9 @@
 "use client"
 
 import { Trophy, CheckCircle2 } from "lucide-react"
+import { getFullName } from "@/lib/utils"
 import { UserAvatar } from "@/components/shared/user-avatar"
 import type { LeaderboardEntry } from "@/types/analytics"
-
-function getFullName(user: any) {
-  return [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Unknown"
-}
 
 export function AnalyticsLeaderboard({ data }: { data: LeaderboardEntry[] }) {
   return (

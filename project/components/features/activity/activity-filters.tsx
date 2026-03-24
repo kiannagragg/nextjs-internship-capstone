@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import type { Project } from "@/types"
 
 const FILTER_OPTIONS = [
   { value: "all", label: "All Activity" },
@@ -23,7 +24,7 @@ interface ActivityFiltersProps {
   setProjectFilter: (val: string) => void
   categoryFilter: string
   setCategoryFilter: (val: string) => void
-  memberProjects: any[] // Replace 'any' with your Project type
+  memberProjects: Pick<Project, "id" | "title" | "color">[]
 }
 
 export function ActivityFilters({
@@ -53,6 +54,7 @@ export function ActivityFilters({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="all">All Projects</SelectItem>
+          {/* TypeScript now knows exactly what properties 'project' has here */}
           {memberProjects.map((project) => (
             <SelectItem key={project.id} value={project.id}>
               <div className="flex items-center gap-2">
