@@ -6,25 +6,23 @@ const createJestConfig = nextJest({
 })
 
 const config: Config = {
-  testEnvironment: "jsdom",
+  coverageProvider: "v8",
+  testEnvironment: "jest-environment-jsdom",
   setupFilesAfterEnv: ["<rootDir>/jest.setup.ts"],
-
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
   },
-  collectCoverage: true,
-  coverageProvider: "v8",
-  collectCoverageFrom: [
-    "components/**/*.{js,jsx,ts,tsx}",
-    "app/**/*.{js,jsx,ts,tsx}",
-    "lib/**/*.{js,jsx,ts,tsx}",
-    "utils/**/*.{js,jsx,ts,tsx}",
-    "!**/*.d.ts",
-    "!**/node_modules/**",
-    "!<rootDir>/.next/**",
-    "!<rootDir>/*.config.js",
-    "!<rootDir>/*.config.ts",
-  ],
 }
 
-export default createJestConfig(config)
+const makeConfig = async () => {
+  const nextJestConfig = await createJestConfig(config)()
+
+  nextJestConfig.transformIgnorePatterns = [
+    "node_modules/(?!(\\.pnpm/.*)?@clerk)",
+    "^.+\\.module\\.(css|sass|scss)$",
+  ]
+
+  return nextJestConfig
+}
+
+export default makeConfig
