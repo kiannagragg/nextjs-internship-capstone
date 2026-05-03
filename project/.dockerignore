@@ -1,0 +1,17 @@
+Dockerfile
+.dockerignore
+/node_modules
+npm-debug.log*
+README.md
+/.next/
+.git
+.env*
+# Ignore e2e test files from the build context
+/coverage/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+tests/.auth/
