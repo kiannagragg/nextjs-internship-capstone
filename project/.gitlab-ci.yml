@@ -18,7 +18,16 @@ build-docker-image:
     - echo "Building Docker image..."
     - cd project
     # Tag the image with the commit SHA and the branch name (e.g., 'feature-button-color')
-    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG .
+    - docker build \
+      --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY \
+      --build-arg NEXT_PUBLIC_CLERK_SIGN_IN_URL=$NEXT_PUBLIC_CLERK_SIGN_IN_URL \
+      --build-arg NEXT_PUBLIC_CLERK_SIGN_UP_URL=$NEXT_PUBLIC_CLERK_SIGN_UP_URL \
+      --build-arg NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=$NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL \
+      --build-arg NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=$NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL \
+      --build-arg NEXT_PUBLIC_PUSHER_KEY=$NEXT_PUBLIC_PUSHER_KEY \
+      --build-arg NEXT_PUBLIC_PUSHER_CLUSTER=$NEXT_PUBLIC_PUSHER_CLUSTER \
+      -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA \
+      -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG .
     
     - echo "Pushing branch tags to the registry..."
     - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
