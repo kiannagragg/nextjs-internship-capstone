@@ -94,7 +94,7 @@ export async function Hero() {
         {userId ? (
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg sm:px-7 sm:text-base"
+            className="inline-flex items-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-brand/90 hover:shadow-lg sm:px-7 sm:text-base"
           >
             Continue to Dashboard
             <ArrowRight size={16} />
@@ -102,7 +102,7 @@ export async function Hero() {
         ) : (
           <Link
             href="/sign-up"
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg sm:px-7 sm:text-base"
+            className="inline-flex items-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-primary-foreground transition-all hover:bg-brand/90 hover:shadow-lg sm:px-7 sm:text-base"
           >
             Get Started Free
             <ArrowRight size={16} />
