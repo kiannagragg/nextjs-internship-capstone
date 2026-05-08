@@ -17,7 +17,7 @@ build-docker-image:
   script:
     - echo "Building Docker image..."
     - cd project
-    # Tag the image with the commit SHA and the branch name (e.g., 'feature-button-color')
+    # Tag the image with the commit SHA 
     - >
       docker build 
       --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" 
@@ -34,7 +34,6 @@ build-docker-image:
     - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
     - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
 
-    # If this is the main branch, ALSO tag it as latest and push it
     - |
       if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
         echo "Main branch detected. Tagging as latest..."
