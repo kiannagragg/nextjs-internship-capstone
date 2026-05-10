@@ -109,9 +109,9 @@ export async function getProjectStats(projectId: string, range: TimeRange) {
   const avgDays = avgHours > 0 ? Math.round((avgHours / 24) * 10) / 10 : 0
 
   return {
-    totalTasks: taskStats?.total ?? 0,
-    completedTasks: taskStats?.completed ?? 0,
-    pendingTasks: taskStats?.pending ?? 0,
+    totalTasks: Number(taskStats?.total ?? 0),
+    completedTasks: Number(taskStats?.completed ?? 0),
+    pendingTasks: Number(taskStats?.pending ?? 0),
     efficiency,
     activeUsers: Number(activeUsersResult?.count ?? 0),
     avgCompletionDays: avgDays,
@@ -140,10 +140,10 @@ export async function getProjectVelocity(projectId: string, range: TimeRange) {
     const [stats] = await db
       .select({
         completed: count(
-          sql`CASE WHEN ${tasks.isCompleted} = true AND ${tasks.completedAt} >= ${weekStart} AND ${tasks.completedAt} < ${weekEnd} THEN 1 END`
+          sql`CASE WHEN ${tasks.isCompleted} = true AND ${tasks.completedAt} >= ${weekStart.toISOString()} AND ${tasks.completedAt} < ${weekEnd.toISOString()} THEN 1 END`
         ),
         created: count(
-          sql`CASE WHEN ${tasks.createdAt} >= ${weekStart} AND ${tasks.createdAt} < ${weekEnd} THEN 1 END`
+          sql`CASE WHEN ${tasks.createdAt} >= ${weekStart.toISOString()} AND ${tasks.createdAt} < ${weekEnd.toISOString()} THEN 1 END`
         ),
       })
       .from(tasks)
@@ -154,8 +154,8 @@ export async function getProjectVelocity(projectId: string, range: TimeRange) {
 
     results.push({
       period: label,
-      completed: stats?.completed ?? 0,
-      created: stats?.created ?? 0,
+      completed: Number(stats?.completed ?? 0),
+      created: Number(stats?.created ?? 0),
     })
   }
 
@@ -194,7 +194,7 @@ export async function getActivityTimeline(projectId: string, range: TimeRange) {
     const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
     filled.push({
       date: label,
-      activities: dateMap.get(key) ?? 0,
+      activities: Number(dateMap.get(key) ?? 0),
     })
   }
 
@@ -223,7 +223,7 @@ export async function getTasksByStatus(projectId: string) {
   return result.map((r) => ({
     name: r.title,
     type: r.type,
-    value: r.count,
+    value: Number(r.count),
   }))
 }
 
@@ -256,7 +256,7 @@ export async function getTasksByPriority(projectId: string) {
       const found = result.find((r) => r.priority === p)
       return {
         name: p ? priorityLabels[p] || p : "No Priority",
-        value: found?.count ?? 0,
+        value: Number(found?.count ?? 0),
       }
     })
     .filter((r) => r.value > 0)

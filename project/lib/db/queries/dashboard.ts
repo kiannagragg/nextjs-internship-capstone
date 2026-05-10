@@ -88,7 +88,7 @@ export async function getDashboardStats(userId: string) {
         inArray(tasks.projectId, projectIds),
         eq(tasks.isCompleted, true),
         gte(tasks.completedAt, twoWeeksAgo),
-        sql`${tasks.completedAt} < ${oneWeekAgo}`
+        lt(tasks.completedAt, oneWeekAgo)
       )
     )
 
@@ -205,15 +205,15 @@ export async function getProjectVelocity(projectId: string, weeks = 8) {
     const [stats] = await db
       .select({
         completed: count(
-          sql`CASE WHEN ${tasks.isCompleted} = true AND ${tasks.completedAt} >= ${weekStart} AND ${tasks.completedAt} < ${weekEnd} THEN 1 END`
+          sql`CASE WHEN ${tasks.isCompleted} = true AND ${tasks.completedAt} >= ${weekStart.toISOString()}::timestamp AND ${tasks.completedAt} < ${weekEnd.toISOString()}::timestamp THEN 1 END`
         ),
         created: count(
-          sql`CASE WHEN ${tasks.createdAt} >= ${weekStart} AND ${tasks.createdAt} < ${weekEnd} THEN 1 END`
+          sql`CASE WHEN ${tasks.createdAt} >= ${weekStart.toISOString()}::timestamp AND ${tasks.createdAt} < ${weekEnd.toISOString()}::timestamp THEN 1 END`
         ),
       })
       .from(tasks)
       .where(eq(tasks.projectId, projectId))
-
+    console.log(`Week ${weeks - i} Data:`, stats);
     results.push({
       period: `Week ${weeks - i}`,
       completed: stats?.completed ?? 0,
