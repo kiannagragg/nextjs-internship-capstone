@@ -1,0 +1,59 @@
+services:
+  # 1. PostgreSQL Database Container
+  db:
+    image: postgres:16-alpine
+    container_name: floe_db
+    ports:
+      - "5432:5432" # Maps localhost:5432 to container:5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: IbmiP11f$$445i2024!
+      POSTGRES_DB: my_nextjs_app
+    volumes:
+      - pgdata:/var/lib/postgresql/data # Persists data across container restarts
+    # The Healthcheck solves the startup race condition
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d my_nextjs_app"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 2. Next.js Application Container
+  app:
+    container_name: floe_app
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Target the 'builder' stage from my Dockerfile to get Node & pnpm,
+      # but don't proceed to the production 'runner' stage.
+      target: builder 
+    # Override the production start command to run the dev server
+    command: pnpm run dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    environment:
+      # Override the local DATABASE_URL to point to the 'db' service network name
+      - DATABASE_URL=postgresql://postgres:IbmiP11f%24445i2024%21@db:5432/my_nextjs_app
+    depends_on:
+      db:
+        condition: service_healthy # Waits for the DB healthcheck to pass
+    # Compose Watch: Syncs files instantly from your machine to the container
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /app
+          ignore:
+            - node_modules/
+            - .next/
+        - action: rebuild
+          path: package.json
+        - action: rebuild
+          path: pnpm-lock.yaml
+
+# Define the persistent volume for the database
+volumes:
+  pgdata:
+    name: floe_pgdata
