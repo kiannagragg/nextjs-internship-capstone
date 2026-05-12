@@ -1,5 +1,30 @@
 stages:
+  - lint
+  - test
   - build
+
+lint-code:
+  stage: lint
+  image: node:22-alpine
+  before_script:
+    - cd project 
+    - corepack enable pnpm
+    - pnpm install --frozen-lockfile
+  script:
+    - echo "Running ESLint..."
+    - pnpm run lint
+
+unit-tests:
+  stage: test
+  image: node:22-alpine
+  before_script:
+    - cd project
+    - corepack enable pnpm 
+    - pnpm install --frozen-lockfile
+  script:
+    - echo "Running Jest tests..."
+    - pnpm run test 
+  allow_failure: true  
 
 build-docker-image:
   stage: build
@@ -17,7 +42,7 @@ build-docker-image:
   script:
     - echo "Building Docker image..."
     - cd project
-    # Tag the image with the commit SHA 
+    # Tag the image with the commit SHA and latest
     - >
       docker build 
       --build-arg NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" 
